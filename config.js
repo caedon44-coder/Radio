@@ -13,9 +13,18 @@ const CONFIG = {
     "user-library-read"
   ].join(" "),
 
-  // How the station mixes content. Every PODCAST_EVERY_N tracks, one
-  // podcast episode is dropped into the queue instead of a song.
-  PODCAST_EVERY_N: 6,
+  // YouTube Data API v3 key. Create one in Google Cloud Console and restrict
+  // it by HTTP referrer to your GitHub Pages origin (see README).
+  YT_API_KEY: "AIzaSyDLp3daijMDYe03Fwi5xFDAXl_of6R6OoM",
+
+  // Videos shorter than this are treated as Shorts/clips and filtered out
+  // of the long-form pool.
+  YT_MIN_DURATION_MINUTES: 15,
+
+  // How the station mixes content. Every LONGFORM_EVERY_N tracks, one
+  // podcast episode or YouTube video is dropped into the queue instead of
+  // a song (whichever pool has something available).
+  LONGFORM_EVERY_N: 6,
 
   // How many upcoming items the app tries to keep queued on the device.
   QUEUE_TARGET_SIZE: 8,

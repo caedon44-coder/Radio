@@ -7,7 +7,9 @@
 const STATION_STORAGE_KEYS = {
   history: "station_history", // recently queued URIs, oldest first
   seeds: "station_seed_artists", // manually added artist names -> id
-  episodeCursor: "station_episode_cursor" // per-show index of next unplayed episode
+  episodeCursor: "station_episode_cursor", // per-show index of next unplayed episode
+  ytSeeds: "station_yt_seeds", // manually added channels/playlists -> playlistId
+  ytCursor: "station_yt_cursor" // per-playlist index of next unplayed video
 };
 
 function loadJSON(key, fallback) {
@@ -24,7 +26,10 @@ function saveJSON(key, value) {
 const Station = {
   trackPool: [], // { uri, name, artist }
   episodePool: [], // { uri, name, show }
+  ytPool: [], // { videoId, title, channelTitle, playlistId }
   tracksSincePodcast: 0,
+  pendingYoutubeItem: null, // set once picked, cleared once actually playing
+  playingYoutube: false,
 
   log(msg) {
     const el = document.getElementById("log");
@@ -64,6 +69,22 @@ const Station = {
       saveJSON(STATION_STORAGE_KEYS.seeds, seeds);
     }
     return artist.name;
+  },
+
+  getYtSeeds() {
+    return loadJSON(STATION_STORAGE_KEYS.ytSeeds, []); // [{playlistId, title}]
+  },
+
+  // Add a YouTube channel or playlist as a long-form content seed.
+  async addYtSeed(input) {
+    const resolved = await YouTube.resolveSeed(input);
+
+    const seeds = this.getYtSeeds();
+    if (!seeds.some((s) => s.playlistId === resolved.playlistId)) {
+      seeds.push(resolved);
+      saveJSON(STATION_STORAGE_KEYS.ytSeeds, seeds);
+    }
+    return resolved.title;
   },
 
   // Pull a handful of tracks from an artist's albums (deep cuts, not just hits,
@@ -196,17 +217,82 @@ const Station = {
     saveJSON(STATION_STORAGE_KEYS.episodeCursor, cursor);
   },
 
-  // Pick the next item to queue: mostly tracks, occasionally an episode,
-  // always avoiding anything queued too recently.
+  // Assemble the pool of candidate long-form videos from seeded channels/playlists.
+  async buildYtPool() {
+    const pool = [];
+    if (!CONFIG.YT_API_KEY) {
+      this.ytPool = pool;
+      return pool;
+    }
+
+    const cursor = loadJSON(STATION_STORAGE_KEYS.ytCursor, {});
+    const minSeconds = CONFIG.YT_MIN_DURATION_MINUTES * 60;
+
+    for (const seed of this.getYtSeeds()) {
+      try {
+        const data = await YouTube.getPlaylistItems(seed.playlistId);
+        const items = data?.items || [];
+        if (items.length === 0) continue;
+
+        const durations = await YouTube.getVideoDurations(
+          items.map((i) => i.contentDetails.videoId)
+        );
+        const longform = items.filter(
+          (i) => (durations[i.contentDetails.videoId] || 0) >= minSeconds
+        );
+        if (longform.length === 0) continue;
+
+        // Oldest-unplayed-first, same pacing as podcast episode selection.
+        const idx = Math.min(cursor[seed.playlistId] || 0, longform.length - 1);
+        const video = longform[idx];
+        pool.push({
+          videoId: video.contentDetails.videoId,
+          title: video.snippet.title,
+          channelTitle: video.snippet.videoOwnerChannelTitle || seed.title,
+          playlistId: seed.playlistId
+        });
+      } catch (e) {
+        this.log(`YouTube seed "${seed.title}" unavailable: ${e.message}`);
+      }
+    }
+
+    this.ytPool = pool;
+    return pool;
+  },
+
+  advanceYtCursor(playlistId) {
+    const cursor = loadJSON(STATION_STORAGE_KEYS.ytCursor, {});
+    cursor[playlistId] = (cursor[playlistId] || 0) + 1;
+    saveJSON(STATION_STORAGE_KEYS.ytCursor, cursor);
+  },
+
+  // Pick the next item to queue: mostly tracks, occasionally a long-form
+  // item (podcast episode or YouTube video), always avoiding anything
+  // queued too recently.
   pickNext() {
     this.tracksSincePodcast++;
 
-    if (this.tracksSincePodcast >= CONFIG.PODCAST_EVERY_N && this.episodePool.length > 0) {
-      const idx = Math.floor(Math.random() * this.episodePool.length);
-      const ep = this.episodePool.splice(idx, 1)[0];
-      this.tracksSincePodcast = 0;
-      this.advanceEpisodeCursor(ep.showId);
-      return { type: "episode", item: ep };
+    if (this.tracksSincePodcast >= CONFIG.LONGFORM_EVERY_N) {
+      const candidates = [
+        ...this.episodePool.map((item) => ({ type: "episode", item })),
+        ...this.ytPool.map((item) => ({ type: "youtube", item }))
+      ];
+
+      if (candidates.length > 0) {
+        const idx = Math.floor(Math.random() * candidates.length);
+        const picked = candidates[idx];
+        this.tracksSincePodcast = 0;
+
+        if (picked.type === "episode") {
+          this.episodePool = this.episodePool.filter((e) => e !== picked.item);
+          this.advanceEpisodeCursor(picked.item.showId);
+        } else {
+          this.ytPool = this.ytPool.filter((v) => v !== picked.item);
+          this.advanceYtCursor(picked.item.playlistId);
+        }
+
+        return picked;
+      }
     }
 
     const fresh = this.trackPool.filter((t) => !this.wasRecentlyPlayed(t.uri));
@@ -220,6 +306,6 @@ const Station = {
   },
 
   async refillPools() {
-    await Promise.all([this.buildTrackPool(), this.buildEpisodePool()]);
+    await Promise.all([this.buildTrackPool(), this.buildEpisodePool(), this.buildYtPool()]);
   }
 };

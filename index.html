@@ -46,6 +46,11 @@
     </div>
   </div>
 
+  <div id="yt-player-panel" class="yt-player-panel hidden">
+    <div class="yt-player-frame"><div id="yt-player"></div></div>
+    <p class="yt-player-note">Video segment — keep this tab open to keep it playing.</p>
+  </div>
+
   <div class="controls-row">
     <button id="start-btn" class="btn-primary">Start Station</button>
     <button id="skip-btn" class="btn-secondary" disabled>Skip</button>
@@ -68,6 +73,15 @@
     <div id="seed-status"></div>
   </div>
 
+  <div class="panel">
+    <span class="panel-label">Add a YouTube channel or playlist</span>
+    <form id="yt-seed-form">
+      <input type="text" id="yt-seed-input" placeholder="Channel URL, @handle, or playlist URL" />
+      <button type="submit" class="btn-secondary">Add</button>
+    </form>
+    <div id="yt-seed-status"></div>
+  </div>
+
   <div class="log-toggle">
     <button id="toggle-log-btn" class="btn-ghost">Show technical log</button>
   </div>
@@ -80,9 +94,11 @@
   </footer>
 </div>
 
+<script src="https://www.youtube.com/iframe_api"></script>
 <script src="config.js"></script>
 <script src="auth.js"></script>
 <script src="spotify.js"></script>
+<script src="youtube.js"></script>
 <script src="station.js"></script>
 <script src="app.js"></script>
 </body>
