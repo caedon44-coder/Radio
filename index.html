@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Your Station</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="login-screen" class="screen">
+  <div class="dial">101.YOU FM</div>
+  <h1 class="station-name">Your Station</h1>
+  <p class="tagline">
+    A radio station built entirely out of your own library — top tracks,
+    saved songs, deep cuts from your favorite artists, and the podcasts
+    you follow, mixed together and streamed to your phone.
+  </p>
+  <button id="login-btn" class="btn-primary">Connect Spotify</button>
+</div>
+
+<div id="dashboard" class="screen hidden">
+  <div class="header-row">
+    <div class="dial">101.YOU FM</div>
+    <div class="on-air">
+      <div id="on-air-dot" class="on-air-dot"></div>
+      <span id="on-air-label">OFF AIR</span>
+    </div>
+  </div>
+
+  <p id="greeting"></p>
+
+  <div class="now-playing">
+    <span id="np-badge" class="badge badge-music">MUSIC</span>
+    <div>
+      <p id="np-title">Nothing playing yet</p>
+      <p id="np-subtitle">Hit start to tune in</p>
+    </div>
+    <div class="vu-meter">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div>
+    </div>
+  </div>
+
+  <div class="controls-row">
+    <button id="start-btn" class="btn-primary">Start Station</button>
+    <button id="skip-btn" class="btn-secondary" disabled>Skip</button>
+  </div>
+
+  <div class="panel">
+    <span class="panel-label">Playback device</span>
+    <div class="device-row">
+      <select id="device-select"><option>Loading devices...</option></select>
+      <button id="refresh-devices-btn" class="btn-ghost">Refresh</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <span class="panel-label">Add a taste seed</span>
+    <form id="seed-form">
+      <input type="text" id="seed-input" placeholder="Artist name" />
+      <button type="submit" class="btn-secondary">Add</button>
+    </form>
+    <div id="seed-status"></div>
+  </div>
+
+  <div class="log-toggle">
+    <button id="toggle-log-btn" class="btn-ghost">Show technical log</button>
+  </div>
+  <div id="log-panel" class="hidden">
+    <pre id="log"></pre>
+  </div>
+
+  <footer>
+    <button id="logout-btn" class="btn-ghost">Disconnect Spotify</button>
+  </footer>
+</div>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="spotify.js"></script>
+<script src="station.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

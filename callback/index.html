@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Signing you in...</title>
+<link rel="stylesheet" href="../style.css" />
+</head>
+<body>
+  <div class="screen" style="justify-content:center;align-items:center;text-align:center;gap:12px;">
+    <div class="dial">101.YOU FM</div>
+    <p id="status" class="tagline">Signing you in...</p>
+  </div>
+
+  <script src="../config.js"></script>
+  <script src="../auth.js"></script>
+  <script>
+    (async function () {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const error = params.get("error");
+      const statusEl = document.getElementById("status");
+
+      if (error) {
+        statusEl.textContent = `Spotify login failed: ${error}`;
+        return;
+      }
+      if (!code) {
+        statusEl.textContent = "No authorization code received.";
+        return;
+      }
+
+      try {
+        await exchangeCodeForToken(code);
+        statusEl.textContent = "Signed in. Taking you to your station...";
+        window.location.href = "../";
+      } catch (e) {
+        statusEl.textContent = `Something went wrong: ${e.message}`;
+      }
+    })();
+  </script>
+</body>
+</html>
