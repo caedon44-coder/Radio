@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Your Station</title>
+<title>Taste Engine</title>
 <link rel="manifest" href="manifest.json" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -13,19 +13,18 @@
 <body>
 
 <div id="login-screen" class="screen">
-  <div class="dial">101.YOU FM</div>
-  <h1 class="station-name">Your Station</h1>
+  <div class="dial">Taste Engine</div>
   <p class="tagline">
-    A radio station built entirely out of your own library — top tracks,
-    saved songs, deep cuts from your favorite artists, and the podcasts
-    you follow, mixed together and streamed to your phone.
+    Built from your own Spotify library, tuned to favor deep cuts you
+    haven't saved yet — from artists you already listen to — over songs
+    you already know. You control the ratio.
   </p>
   <button id="login-btn" class="btn-primary">Connect Spotify</button>
 </div>
 
 <div id="dashboard" class="screen hidden">
   <div class="header-row">
-    <div class="dial">101.YOU FM</div>
+    <div class="dial">Taste Engine</div>
     <div class="on-air">
       <div id="on-air-dot" class="on-air-dot"></div>
       <span id="on-air-label">OFF AIR</span>
@@ -35,7 +34,7 @@
   <p id="greeting"></p>
 
   <div class="now-playing">
-    <span id="np-badge" class="badge badge-music">MUSIC</span>
+    <span id="np-badge" class="badge badge-familiar">FAMILIAR</span>
     <div>
       <p id="np-title">Nothing playing yet</p>
       <p id="np-subtitle">Hit start to tune in</p>
@@ -46,13 +45,8 @@
     </div>
   </div>
 
-  <div id="yt-player-panel" class="yt-player-panel hidden">
-    <div class="yt-player-frame"><div id="yt-player"></div></div>
-    <p class="yt-player-note">Video segment — keep this tab open to keep it playing.</p>
-  </div>
-
   <div class="controls-row">
-    <button id="start-btn" class="btn-primary">Start Station</button>
+    <button id="start-btn" class="btn-primary">Start Engine</button>
     <button id="skip-btn" class="btn-secondary" disabled>Skip</button>
   </div>
 
@@ -65,21 +59,25 @@
   </div>
 
   <div class="panel">
+    <span class="panel-label">New vs. familiar</span>
+    <div class="ratio-row">
+      <input type="range" id="ratio-slider" min="0" max="100" step="5" value="65" />
+      <span id="ratio-value">65% new</span>
+    </div>
+    <p class="ratio-hint">
+      How often the engine reaches for deep cuts you haven't saved, from
+      artists you already listen to, instead of songs already in your
+      rotation. Takes effect on the next pick — no restart needed.
+    </p>
+  </div>
+
+  <div class="panel">
     <span class="panel-label">Add a taste seed</span>
     <form id="seed-form">
       <input type="text" id="seed-input" placeholder="Artist name" />
       <button type="submit" class="btn-secondary">Add</button>
     </form>
     <div id="seed-status"></div>
-  </div>
-
-  <div class="panel">
-    <span class="panel-label">Add a YouTube channel or playlist</span>
-    <form id="yt-seed-form">
-      <input type="text" id="yt-seed-input" placeholder="Channel URL, @handle, or playlist URL" />
-      <button type="submit" class="btn-secondary">Add</button>
-    </form>
-    <div id="yt-seed-status"></div>
   </div>
 
   <div class="log-toggle">
@@ -94,11 +92,9 @@
   </footer>
 </div>
 
-<script src="https://www.youtube.com/iframe_api"></script>
 <script src="config.js"></script>
 <script src="auth.js"></script>
 <script src="spotify.js"></script>
-<script src="youtube.js"></script>
 <script src="station.js"></script>
 <script src="app.js"></script>
 </body>

@@ -2,28 +2,11 @@
 
 let selectedDeviceId = null;
 let pollTimer = null;
-let ytPlayer = null;
 
 const $ = (id) => document.getElementById(id);
 
 function show(el) { el.classList.remove("hidden"); }
 function hide(el) { el.classList.add("hidden"); }
-
-// Called by the YouTube IFrame API once it's loaded (script tag in index.html).
-function onYouTubeIframeAPIReady() {
-  ytPlayer = new YT.Player("yt-player", {
-    height: "100%",
-    width: "100%",
-    playerVars: { playsinline: 1, rel: 0 },
-    events: {
-      onStateChange: (event) => {
-        if (event.data === YT.PlayerState.ENDED) {
-          resumeSpotifyAfterYoutube();
-        }
-      }
-    }
-  });
-}
 
 async function init() {
   if (!isLoggedIn()) {
@@ -66,26 +49,24 @@ function wireControls() {
     $("seed-status").textContent = "Adding...";
     try {
       const found = await Station.addSeedArtist(name);
-      $("seed-status").textContent = `Added "${found}" to your station.`;
+      $("seed-status").textContent = `Added "${found}" to your rotation.`;
       input.value = "";
     } catch (err) {
       $("seed-status").textContent = err.message;
     }
   });
 
-  $("yt-seed-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const input = $("yt-seed-input");
-    const value = input.value.trim();
-    if (!value) return;
-    $("yt-seed-status").textContent = "Adding...";
-    try {
-      const found = await Station.addYtSeed(value);
-      $("yt-seed-status").textContent = `Added "${found}" to your station.`;
-      input.value = "";
-    } catch (err) {
-      $("yt-seed-status").textContent = err.message;
-    }
+  const ratioSlider = $("ratio-slider");
+  const updateRatioLabel = (pct) => {
+    $("ratio-value").textContent = `${pct}% new`;
+  };
+  const initialPct = Math.round(Station.getNewRatio() * 100);
+  ratioSlider.value = initialPct;
+  updateRatioLabel(initialPct);
+  ratioSlider.addEventListener("input", () => {
+    const pct = Number(ratioSlider.value);
+    Station.setNewRatio(pct / 100);
+    updateRatioLabel(pct);
   });
 
   $("toggle-log-btn").addEventListener("click", () => {
@@ -127,79 +108,19 @@ function setOnAir(isOn) {
 }
 
 function renderNowPlaying(kind, item) {
-  const badgeText = kind === "episode" ? "PODCAST" : kind === "youtube" ? "VIDEO" : "MUSIC";
-  const badgeClass =
-    kind === "episode" ? "badge-podcast" : kind === "youtube" ? "badge-video" : "badge-music";
+  let badgeText = "FAMILIAR";
+  let badgeClass = "badge-familiar";
+  if (kind === "episode") {
+    badgeText = "PODCAST";
+    badgeClass = "badge-podcast";
+  } else if (item.origin === "fresh") {
+    badgeText = "NEW";
+    badgeClass = "badge-new";
+  }
   $("np-badge").textContent = badgeText;
   $("np-badge").className = `badge ${badgeClass}`;
-  $("np-title").textContent = item.name || item.title || "—";
-  $("np-subtitle").textContent =
-    kind === "episode" ? item.show : kind === "youtube" ? item.channelTitle : item.artist;
-}
-
-// Pushes up to maxCount picks into Spotify's on-device queue. Stops (without
-// consuming that pick) the moment a YouTube video comes up, since Spotify's
-// queue can't hold anything but Spotify URIs — the video is stashed as
-// pendingYoutubeItem and handled once the Spotify queue actually drains.
-async function fillSpotifyQueue(maxCount) {
-  for (let i = 0; i < maxCount; i++) {
-    const next = Station.pickNext();
-    if (!next) break;
-
-    if (next.type === "youtube") {
-      Station.pendingYoutubeItem = next.item;
-      break;
-    }
-
-    await Spotify.addToQueue(next.item.uri, selectedDeviceId);
-    Station.remember(next.item.uri);
-  }
-}
-
-// Pauses Spotify and hands playback over to the embedded YouTube player.
-// Foreground-only: the tab has to stay open and active for this to keep
-// playing, unlike Spotify Connect segments.
-async function playYoutubeItem(item) {
-  try {
-    await Spotify.pause(selectedDeviceId);
-  } catch (e) {
-    Station.log(`Couldn't pause Spotify before video: ${e.message}`);
-  }
-
-  Station.playingYoutube = true;
-  renderNowPlaying("youtube", item);
-  setOnAir(true);
-  show($("yt-player-panel"));
-  ytPlayer.loadVideoById(item.videoId);
-}
-
-// Called when the embedded video ends (or is skipped) to hand playback back to Spotify.
-async function resumeSpotifyAfterYoutube() {
-  hide($("yt-player-panel"));
-  Station.playingYoutube = false;
-
-  try {
-    const next = Station.pickNext();
-    if (!next) {
-      Station.log("Nothing left to play after the video segment.");
-      setOnAir(false);
-      return;
-    }
-
-    if (next.type === "youtube") {
-      await playYoutubeItem(next.item);
-      return;
-    }
-
-    await Spotify.startPlayback(selectedDeviceId, [next.item.uri]);
-    Station.remember(next.item.uri);
-    renderNowPlaying(next.type, next.item);
-    setOnAir(true);
-
-    await fillSpotifyQueue(CONFIG.QUEUE_TARGET_SIZE - 1);
-  } catch (e) {
-    Station.log(`Couldn't resume Spotify after video: ${e.message}`);
-  }
+  $("np-title").textContent = item.name || "—";
+  $("np-subtitle").textContent = kind === "episode" ? item.show : item.artist;
 }
 
 async function startStation() {
@@ -209,7 +130,7 @@ async function startStation() {
   }
 
   $("start-btn").disabled = true;
-  $("start-btn").textContent = "Tuning in...";
+  $("start-btn").textContent = "Spinning up...";
 
   try {
     await Station.refillPools();
@@ -217,27 +138,28 @@ async function startStation() {
     const first = Station.pickNext();
     if (!first) throw new Error("Couldn't find anything to play. Try adding a seed artist.");
 
+    const firstUri = first.item.uri;
     await Spotify.transferPlayback(selectedDeviceId, false);
     await new Promise((r) => setTimeout(r, 800)); // let transfer settle
+    await Spotify.startPlayback(selectedDeviceId, [firstUri]);
+    Station.remember(firstUri);
+    renderNowPlaying(first.type, first.item);
+    setOnAir(true);
 
-    if (first.type === "youtube") {
-      await playYoutubeItem(first.item);
-    } else {
-      await Spotify.startPlayback(selectedDeviceId, [first.item.uri]);
-      Station.remember(first.item.uri);
-      renderNowPlaying(first.type, first.item);
-      setOnAir(true);
-
-      // Queue up a handful more behind it (stops short of any YouTube pick)
-      await fillSpotifyQueue(CONFIG.QUEUE_TARGET_SIZE - 1);
+    // Queue up a handful more behind it
+    for (let i = 0; i < CONFIG.QUEUE_TARGET_SIZE - 1; i++) {
+      const next = Station.pickNext();
+      if (!next) break;
+      await Spotify.addToQueue(next.item.uri, selectedDeviceId);
+      Station.remember(next.item.uri);
     }
 
-    $("start-btn").textContent = "Restart Station";
+    $("start-btn").textContent = "Restart Engine";
     $("skip-btn").disabled = false;
     startPolling();
   } catch (e) {
-    Station.log(`Couldn't start station: ${e.message}`);
-    $("start-btn").textContent = "Start Station";
+    Station.log(`Couldn't start engine: ${e.message}`);
+    $("start-btn").textContent = "Start Engine";
   } finally {
     $("start-btn").disabled = false;
   }
@@ -245,11 +167,6 @@ async function startStation() {
 
 async function skipTrack() {
   try {
-    if (Station.playingYoutube) {
-      ytPlayer.stopVideo();
-      await resumeSpotifyAfterYoutube();
-      return;
-    }
     await Spotify.skipNext(selectedDeviceId);
     await topUpQueue();
   } catch (e) {
@@ -258,8 +175,6 @@ async function skipTrack() {
 }
 
 async function topUpQueue() {
-  if (Station.playingYoutube) return; // handled by the YouTube player's onStateChange
-
   try {
     const state = await Spotify.getPlaybackState();
     if (state?.item) {
@@ -267,28 +182,20 @@ async function topUpQueue() {
       const name = state.item.name;
       const subtitle =
         kind === "episode" ? state.item.show?.name : state.item.artists?.[0]?.name;
-      renderNowPlaying(kind, { name, artist: subtitle, show: subtitle });
+      const origin = Station.originByUri[state.item.uri];
+      renderNowPlaying(kind, { name, artist: subtitle, show: subtitle, origin });
       setOnAir(state.is_playing);
     }
 
     const queue = await Spotify.getCurrentQueue();
     const upcoming = queue?.queue?.length || 0;
-
-    if (Station.pendingYoutubeItem) {
-      // Wait for the last queued track to actually finish (not just start
-      // playing with nothing behind it) before cutting over to the video.
-      const spotifyStopped = !state || !state.is_playing;
-      if (upcoming === 0 && spotifyStopped) {
-        const item = Station.pendingYoutubeItem;
-        Station.pendingYoutubeItem = null;
-        await playYoutubeItem(item);
-      }
-      return;
-    }
-
     if (upcoming < 3) {
-      await fillSpotifyQueue(1);
-      if (Station.trackPool.length < 5) {
+      const next = Station.pickNext();
+      if (next) {
+        await Spotify.addToQueue(next.item.uri, selectedDeviceId);
+        Station.remember(next.item.uri);
+      }
+      if (Station.knownPool.length + Station.freshPool.length < 5) {
         await Station.refillPools();
       }
     }

@@ -36,6 +36,8 @@ const Spotify = {
     spotifyFetch(`/me/tracks?limit=${limit}&offset=${offset}`),
   getSavedShows: (limit = 20, offset = 0) =>
     spotifyFetch(`/me/shows?limit=${limit}&offset=${offset}`),
+  // Returns booleans in the same order as ids (max 50 ids per call).
+  checkSavedTracks: (ids) => spotifyFetch(`/me/tracks/contains?ids=${ids.join(",")}`),
 
   // Catalog
   getShowEpisodes: (showId, limit = 10) =>

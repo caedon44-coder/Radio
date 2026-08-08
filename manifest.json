@@ -1,6 +1,6 @@
 {
-  "name": "Your Station",
-  "short_name": "Your Station",
+  "name": "Taste Engine",
+  "short_name": "Taste Engine",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#12141a",

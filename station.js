@@ -1,15 +1,16 @@
-// ---- The "station" itself: taste pool assembly + mixing logic ----
+// ---- The "engine" itself: taste pool assembly + mixing logic ----
 // No /recommendations endpoint exists anymore, so discovery here is honest:
-// your top tracks + saved tracks + recently played + deep cuts pulled from
-// your favorite artists' other albums, shuffled with memory, plus podcast
-// episodes from shows you follow. You can also add manual "seed" artists.
+// candidates are split into a "known" pool (top tracks, saved tracks,
+// recently played) and a "fresh" pool (deep cuts from artists you listen
+// to that you haven't saved), and a user-adjustable ratio decides which
+// pool each pick comes from — plus podcast episodes from shows you follow.
+// You can also add manual "seed" artists.
 
 const STATION_STORAGE_KEYS = {
   history: "station_history", // recently queued URIs, oldest first
   seeds: "station_seed_artists", // manually added artist names -> id
   episodeCursor: "station_episode_cursor", // per-show index of next unplayed episode
-  ytSeeds: "station_yt_seeds", // manually added channels/playlists -> playlistId
-  ytCursor: "station_yt_cursor" // per-playlist index of next unplayed video
+  newRatio: "station_new_ratio" // 0-1 share of picks pulled from the fresh pool
 };
 
 function loadJSON(key, fallback) {
@@ -24,12 +25,11 @@ function saveJSON(key, value) {
 }
 
 const Station = {
-  trackPool: [], // { uri, name, artist }
+  knownPool: [], // { uri, name, artist } - top tracks, saved tracks, recently played
+  freshPool: [], // { uri, name, artist } - deep cuts you haven't saved
   episodePool: [], // { uri, name, show }
-  ytPool: [], // { videoId, title, channelTitle, playlistId }
+  originByUri: {}, // uri -> "known" | "fresh", so re-renders after a poll can still badge correctly
   tracksSincePodcast: 0,
-  pendingYoutubeItem: null, // set once picked, cleared once actually playing
-  playingYoutube: false,
 
   log(msg) {
     const el = document.getElementById("log");
@@ -52,6 +52,13 @@ const Station = {
     return this.getHistory().includes(uri);
   },
 
+  getNewRatio() {
+    return loadJSON(STATION_STORAGE_KEYS.newRatio, CONFIG.NEW_TRACK_RATIO);
+  },
+  setNewRatio(ratio) {
+    saveJSON(STATION_STORAGE_KEYS.newRatio, Math.max(0, Math.min(1, ratio)));
+  },
+
   getSeedArtists() {
     return loadJSON(STATION_STORAGE_KEYS.seeds, []); // [{id, name}]
   },
@@ -69,22 +76,6 @@ const Station = {
       saveJSON(STATION_STORAGE_KEYS.seeds, seeds);
     }
     return artist.name;
-  },
-
-  getYtSeeds() {
-    return loadJSON(STATION_STORAGE_KEYS.ytSeeds, []); // [{playlistId, title}]
-  },
-
-  // Add a YouTube channel or playlist as a long-form content seed.
-  async addYtSeed(input) {
-    const resolved = await YouTube.resolveSeed(input);
-
-    const seeds = this.getYtSeeds();
-    if (!seeds.some((s) => s.playlistId === resolved.playlistId)) {
-      seeds.push(resolved);
-      saveJSON(STATION_STORAGE_KEYS.ytSeeds, seeds);
-    }
-    return resolved.title;
   },
 
   // Pull a handful of tracks from an artist's albums (deep cuts, not just hits,
@@ -105,15 +96,17 @@ const Station = {
     return out;
   },
 
-  // Assemble the pool of candidate tracks from every taste source we have.
-  async buildTrackPool() {
-    const pool = [];
-    const seenUris = new Set();
-    const addAll = (items) => {
+  // Assemble the "known" pool (things you already listen to) and the
+  // "fresh" pool (deep cuts from those same artists that you haven't
+  // saved) separately, so pickNext can weight between them.
+  async buildPools() {
+    const known = [];
+    const seenKnown = new Set();
+    const addKnown = (items) => {
       for (const t of items) {
-        if (t?.uri && !seenUris.has(t.uri)) {
-          seenUris.add(t.uri);
-          pool.push(t);
+        if (t?.uri && !seenKnown.has(t.uri)) {
+          seenKnown.add(t.uri);
+          known.push(t);
         }
       }
     };
@@ -122,7 +115,7 @@ const Station = {
     for (const range of ["short_term", "medium_term", "long_term"]) {
       try {
         const top = await Spotify.getTopItems("tracks", range, 10);
-        addAll(
+        addKnown(
           (top?.items || []).map((t) => ({
             uri: t.uri,
             name: t.name,
@@ -136,8 +129,8 @@ const Station = {
 
     // Saved (liked) tracks
     try {
-      const saved = await Spotify.getSavedTracks(20);
-      addAll(
+      const saved = await Spotify.getSavedTracks(50);
+      addKnown(
         (saved?.items || []).map((i) => ({
           uri: i.track?.uri,
           name: i.track?.name,
@@ -151,7 +144,7 @@ const Station = {
     // Recently played
     try {
       const recent = await Spotify.getRecentlyPlayed(20);
-      addAll(
+      addKnown(
         (recent?.items || []).map((i) => ({
           uri: i.track?.uri,
           name: i.track?.name,
@@ -162,23 +155,59 @@ const Station = {
       this.log(`Recently played unavailable: ${e.message}`);
     }
 
-    // Deep cuts from top artists' catalogs
+    // Deep cuts from top artists' + seed artists' catalogs - candidates
+    // for the "fresh" pool, pending a saved-status check below.
+    const deepCuts = [];
+    const seenDeep = new Set();
+    const addDeep = (items) => {
+      for (const t of items) {
+        if (t?.uri && !seenKnown.has(t.uri) && !seenDeep.has(t.uri)) {
+          seenDeep.add(t.uri);
+          deepCuts.push(t);
+        }
+      }
+    };
+
     try {
       const topArtists = await Spotify.getTopItems("artists", "medium_term", 5);
       for (const artist of topArtists?.items || []) {
-        addAll(await this.tracksForArtist(artist.id));
+        addDeep(await this.tracksForArtist(artist.id));
       }
     } catch (e) {
       this.log(`Top artists unavailable: ${e.message}`);
     }
 
-    // Manually seeded artists
     for (const seed of this.getSeedArtists()) {
-      addAll(await this.tracksForArtist(seed.id));
+      addDeep(await this.tracksForArtist(seed.id));
     }
 
-    this.trackPool = pool;
-    return pool;
+    // A deep cut can be saved even if it wasn't on the first page of Liked
+    // Songs above - double check against your library so "fresh" really
+    // means "not saved," not just "not on the first 50."
+    const fresh = await this.filterUnsaved(deepCuts);
+
+    this.knownPool = known;
+    this.freshPool = fresh;
+    return { known, fresh };
+  },
+
+  // Splits tracks into "not in your library" by batching /me/tracks/contains
+  // (max 50 ids/call). On failure, assumes unsaved rather than blocking
+  // discovery on a flaky request.
+  async filterUnsaved(tracks) {
+    const savedFlags = [];
+    for (let i = 0; i < tracks.length; i += 50) {
+      const batch = tracks.slice(i, i + 50);
+      const ids = batch.map((t) => t.uri.split(":").pop());
+      try {
+        const result = await Spotify.checkSavedTracks(ids);
+        savedFlags.push(...(result || batch.map(() => false)));
+      } catch (e) {
+        this.log(`Saved-status check unavailable: ${e.message}`);
+        savedFlags.push(...batch.map(() => false));
+      }
+    }
+    return tracks.filter((_, i) => !savedFlags[i]);
   },
 
   // Assemble the pool of candidate podcast episodes from followed shows.
@@ -217,95 +246,52 @@ const Station = {
     saveJSON(STATION_STORAGE_KEYS.episodeCursor, cursor);
   },
 
-  // Assemble the pool of candidate long-form videos from seeded channels/playlists.
-  async buildYtPool() {
-    const pool = [];
-    if (!CONFIG.YT_API_KEY) {
-      this.ytPool = pool;
-      return pool;
-    }
-
-    const cursor = loadJSON(STATION_STORAGE_KEYS.ytCursor, {});
-    const minSeconds = CONFIG.YT_MIN_DURATION_MINUTES * 60;
-
-    for (const seed of this.getYtSeeds()) {
-      try {
-        const data = await YouTube.getPlaylistItems(seed.playlistId);
-        const items = data?.items || [];
-        if (items.length === 0) continue;
-
-        const durations = await YouTube.getVideoDurations(
-          items.map((i) => i.contentDetails.videoId)
-        );
-        const longform = items.filter(
-          (i) => (durations[i.contentDetails.videoId] || 0) >= minSeconds
-        );
-        if (longform.length === 0) continue;
-
-        // Oldest-unplayed-first, same pacing as podcast episode selection.
-        const idx = Math.min(cursor[seed.playlistId] || 0, longform.length - 1);
-        const video = longform[idx];
-        pool.push({
-          videoId: video.contentDetails.videoId,
-          title: video.snippet.title,
-          channelTitle: video.snippet.videoOwnerChannelTitle || seed.title,
-          playlistId: seed.playlistId
-        });
-      } catch (e) {
-        this.log(`YouTube seed "${seed.title}" unavailable: ${e.message}`);
-      }
-    }
-
-    this.ytPool = pool;
-    return pool;
+  // Picks one track from a pool, preferring ones not queued too recently
+  // but falling back to the full pool if everything in it was recent.
+  pickFromPool(pool) {
+    const notRecent = pool.filter((t) => !this.wasRecentlyPlayed(t.uri));
+    const source = notRecent.length > 0 ? notRecent : pool;
+    if (source.length === 0) return null;
+    return source[Math.floor(Math.random() * source.length)];
   },
 
-  advanceYtCursor(playlistId) {
-    const cursor = loadJSON(STATION_STORAGE_KEYS.ytCursor, {});
-    cursor[playlistId] = (cursor[playlistId] || 0) + 1;
-    saveJSON(STATION_STORAGE_KEYS.ytCursor, cursor);
-  },
-
-  // Pick the next item to queue: mostly tracks, occasionally a long-form
-  // item (podcast episode or YouTube video), always avoiding anything
-  // queued too recently.
+  // Pick the next item to queue: mostly tracks weighted by the new/familiar
+  // ratio, occasionally an episode, always avoiding anything queued too
+  // recently.
   pickNext() {
     this.tracksSincePodcast++;
 
-    if (this.tracksSincePodcast >= CONFIG.LONGFORM_EVERY_N) {
-      const candidates = [
-        ...this.episodePool.map((item) => ({ type: "episode", item })),
-        ...this.ytPool.map((item) => ({ type: "youtube", item }))
-      ];
-
-      if (candidates.length > 0) {
-        const idx = Math.floor(Math.random() * candidates.length);
-        const picked = candidates[idx];
-        this.tracksSincePodcast = 0;
-
-        if (picked.type === "episode") {
-          this.episodePool = this.episodePool.filter((e) => e !== picked.item);
-          this.advanceEpisodeCursor(picked.item.showId);
-        } else {
-          this.ytPool = this.ytPool.filter((v) => v !== picked.item);
-          this.advanceYtCursor(picked.item.playlistId);
-        }
-
-        return picked;
-      }
+    if (this.tracksSincePodcast >= CONFIG.PODCAST_EVERY_N && this.episodePool.length > 0) {
+      const idx = Math.floor(Math.random() * this.episodePool.length);
+      const ep = this.episodePool.splice(idx, 1)[0];
+      this.tracksSincePodcast = 0;
+      this.advanceEpisodeCursor(ep.showId);
+      return { type: "episode", item: ep };
     }
 
-    const fresh = this.trackPool.filter((t) => !this.wasRecentlyPlayed(t.uri));
-    const source = fresh.length > 0 ? fresh : this.trackPool;
-    if (source.length === 0) return null;
+    const wantFresh = Math.random() < this.getNewRatio();
+    let origin = wantFresh ? "fresh" : "known";
+    let track = this.pickFromPool(wantFresh ? this.freshPool : this.knownPool);
 
-    const idx = Math.floor(Math.random() * source.length);
-    const track = source[idx];
-    this.trackPool = this.trackPool.filter((t) => t.uri !== track.uri);
-    return { type: "track", item: track };
+    if (!track) {
+      // The preferred pool is empty - fall back to the other rather than
+      // playing nothing.
+      origin = wantFresh ? "known" : "fresh";
+      track = this.pickFromPool(wantFresh ? this.knownPool : this.freshPool);
+    }
+    if (!track) return null;
+
+    if (origin === "fresh") {
+      this.freshPool = this.freshPool.filter((t) => t.uri !== track.uri);
+    } else {
+      this.knownPool = this.knownPool.filter((t) => t.uri !== track.uri);
+    }
+    this.originByUri[track.uri] = origin;
+
+    return { type: "track", item: { ...track, origin } };
   },
 
   async refillPools() {
-    await Promise.all([this.buildTrackPool(), this.buildEpisodePool(), this.buildYtPool()]);
+    await Promise.all([this.buildPools(), this.buildEpisodePool()]);
   }
 };

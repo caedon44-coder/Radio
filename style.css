@@ -6,6 +6,7 @@
   --surface-raised: #232833;
   --amber: #e8a33d;
   --teal: #4fb3a9;
+  --violet: #9d8cf5;
   --text: #f2efe9;
   --text-muted: #8b8f9a;
   --border: #2b3140;
@@ -147,9 +148,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   padding: 4px 10px;
   border-radius: 999px;
 }
-.badge-music { background: rgba(232, 163, 61, 0.15); color: var(--amber); }
+.badge-familiar { background: rgba(232, 163, 61, 0.15); color: var(--amber); }
 .badge-podcast { background: rgba(79, 179, 169, 0.15); color: var(--teal); }
-.badge-video { background: rgba(255, 91, 91, 0.15); color: #ff5b5b; }
+.badge-new { background: rgba(157, 140, 245, 0.15); color: var(--violet); }
 
 #np-title {
   font-family: 'Space Grotesk', sans-serif;
@@ -226,43 +227,35 @@ select, input[type="text"] {
 .device-row { display: flex; gap: 8px; }
 .device-row select { flex: 1; }
 
-#seed-form, #yt-seed-form { display: flex; gap: 8px; }
-#seed-form input, #yt-seed-form input { flex: 1; }
-#seed-status, #yt-seed-status {
+#seed-form { display: flex; gap: 8px; }
+#seed-form input { flex: 1; }
+#seed-status {
   font-size: 13px;
   color: var(--text-muted);
   min-height: 16px;
 }
 
-/* YouTube video segment */
-.yt-player-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 12px;
+.ratio-row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
 }
-.yt-player-frame {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #000;
+#ratio-slider {
+  flex: 1;
+  accent-color: var(--violet);
 }
-.yt-player-frame iframe {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+#ratio-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--violet);
+  min-width: 60px;
+  text-align: right;
 }
-.yt-player-note {
-  margin: 0;
-  text-align: center;
+.ratio-hint {
   font-size: 12px;
   color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0;
 }
 
 #greeting {

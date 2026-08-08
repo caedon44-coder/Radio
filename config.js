@@ -1,4 +1,4 @@
-// ---- Station configuration ----
+// ---- Taste Engine configuration ----
 // This is a personal, single-user app (Spotify Developer Mode, 5-user cap),
 // so it's fine for the Client ID to live in client-side code.
 
@@ -13,18 +13,15 @@ const CONFIG = {
     "user-library-read"
   ].join(" "),
 
-  // YouTube Data API v3 key. Create one in Google Cloud Console and restrict
-  // it by HTTP referrer to your GitHub Pages origin (see README).
-  YT_API_KEY: "AIzaSyDLp3daijMDYe03Fwi5xFDAXl_of6R6OoM",
+  // Default share of picks pulled from the "fresh" pool (deep cuts from
+  // artists you listen to that aren't in your saved library) vs the
+  // "known" pool (top tracks, saved tracks, recently played). Adjustable
+  // live from the dashboard slider; this is just the starting value.
+  NEW_TRACK_RATIO: 0.65,
 
-  // Videos shorter than this are treated as Shorts/clips and filtered out
-  // of the long-form pool.
-  YT_MIN_DURATION_MINUTES: 15,
-
-  // How the station mixes content. Every LONGFORM_EVERY_N tracks, one
-  // podcast episode or YouTube video is dropped into the queue instead of
-  // a song (whichever pool has something available).
-  LONGFORM_EVERY_N: 6,
+  // How the station mixes content. Every PODCAST_EVERY_N tracks, one
+  // podcast episode is dropped into the queue instead of a song.
+  PODCAST_EVERY_N: 6,
 
   // How many upcoming items the app tries to keep queued on the device.
   QUEUE_TARGET_SIZE: 8,
