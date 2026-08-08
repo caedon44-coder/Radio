@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=20260809" />
+<link rel="stylesheet" href="style.css?v=20260811" />
 </head>
 <body>
 
@@ -24,6 +24,7 @@
       you already know. You control the ratio.
     </p>
     <button id="login-btn" class="btn btn-primary btn-block">Connect Spotify</button>
+    <img src="icons/spotify-full-logo-black.svg" alt="Spotify" class="spotify-attribution-logo" />
   </div>
 </div>
 
@@ -31,90 +32,131 @@
   <div class="dsk-shell">
     <div class="dsk-nav">
       <span class="dial">TASTE ENGINE</span>
-      <span class="dsk-navlink active">Home</span>
+      <div class="dsk-nav-links">
+        <span class="dsk-navlink active" data-tab="home">Home</span>
+        <span class="dsk-navlink" data-tab="stats">Stats</span>
+      </div>
       <p id="greeting" class="dsk-greeting"></p>
     </div>
 
     <div class="dsk-main">
-      <div class="onair" style="align-self:flex-end">
-        <div id="on-air-dot" class="dot"></div>
-        <span id="on-air-label">OFF AIR</span>
-      </div>
+      <div id="home-view">
+        <div class="onair" style="align-self:flex-end">
+          <div id="on-air-dot" class="dot"></div>
+          <span id="on-air-label">OFF AIR</span>
+        </div>
 
-      <div class="dsk-np">
-        <img id="np-art" class="dsk-art hidden" alt="" />
-        <div class="dsk-np-body">
-          <span id="np-badge" class="tag tag-accent">FAMILIAR</span>
+        <div class="dsk-np">
+          <img id="np-art" class="dsk-art hidden" alt="" />
+          <div class="dsk-np-body">
+            <div class="np-badge-row">
+              <span id="np-badge" class="tag tag-accent">FAMILIAR</span>
+              <img src="icons/spotify-icon-black.svg" alt="Spotify" class="spotify-mark" />
+            </div>
+            <div>
+              <p id="np-title" class="np-title">Nothing playing yet</p>
+              <p id="np-subtitle" class="np-sub">Hit start to tune in</p>
+            </div>
+            <a id="np-spotify-link" class="spotify-text-link hidden" href="#" target="_blank" rel="noopener">Listen on Spotify</a>
+            <div class="vu" id="vu">
+              <i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <div class="ctrl-stack">
+              <button id="start-btn" class="btn btn-primary btn-block">Start Engine</button>
+              <div class="transport-pad">
+                <button id="prev-btn" class="transport-btn" disabled aria-label="Previous track">⏮</button>
+                <button id="play-pause-btn" class="transport-btn transport-btn-primary" disabled aria-label="Play">▶</button>
+                <button id="next-btn" class="transport-btn" disabled aria-label="Next track">⏭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dsk-cols">
           <div>
-            <p id="np-title" class="np-title">Nothing playing yet</p>
-            <p id="np-subtitle" class="np-sub">Hit start to tune in</p>
+            <p class="section-label">Up next in your rotation</p>
+            <div id="feed-list" class="dsk-feed-list">
+              <p class="feed-empty" id="feed-empty">Nothing queued yet.</p>
+            </div>
           </div>
-          <div class="vu" id="vu">
-            <i></i><i></i><i></i><i></i><i></i>
-          </div>
-          <div class="ctrl-stack">
-            <button id="start-btn" class="btn btn-primary btn-block">Start Engine</button>
-            <div class="transport-pad">
-              <button id="prev-btn" class="transport-btn" disabled aria-label="Previous track">⏮</button>
-              <button id="play-pause-btn" class="transport-btn transport-btn-primary" disabled aria-label="Play">▶</button>
-              <button id="next-btn" class="transport-btn" disabled aria-label="Next track">⏭</button>
+
+          <div class="dsk-side-card">
+            <p class="section-label">Your taste profile</p>
+            <div class="stat-row">
+              <div class="stat"><div id="stat-tracks" class="stat-num">0</div><div class="stat-label">tracks in rotation</div></div>
+              <div class="stat"><div id="stat-seeds" class="stat-num">0</div><div class="stat-label">seed artists</div></div>
+            </div>
+
+            <div class="side-block">
+              <span class="section-label">New vs. familiar</span>
+              <div class="ratio-row">
+                <input type="range" id="ratio-slider" min="0" max="100" step="5" value="65" />
+                <span id="ratio-value">65% new</span>
+              </div>
+              <p class="ratio-hint">
+                How often the engine reaches for a deep cut you haven't saved
+                instead of a song already in your rotation. Applies to the
+                next pick — no restart needed.
+              </p>
+            </div>
+
+            <div class="side-block">
+              <span class="section-label">Add a taste seed</span>
+              <form id="seed-form">
+                <input type="text" id="seed-input" placeholder="Artist name" />
+                <button type="submit" class="btn btn-secondary">Add</button>
+              </form>
+              <div id="seed-status" class="hint-text"></div>
+            </div>
+
+            <div class="side-block">
+              <span class="section-label">Playback device</span>
+              <div class="device-row">
+                <select id="device-select"><option>Loading devices...</option></select>
+                <button id="refresh-devices-btn" class="btn btn-ghost">Refresh</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="dsk-cols">
-        <div>
-          <p class="section-label">Up next in your rotation</p>
-          <div id="feed-list" class="dsk-feed-list">
-            <p class="feed-empty" id="feed-empty">Nothing queued yet.</p>
-          </div>
+        <div class="log-toggle">
+          <button id="toggle-log-btn" class="btn btn-ghost">Show technical log</button>
         </div>
-
-        <div class="dsk-side-card">
-          <p class="section-label">Your taste profile</p>
-          <div class="stat-row">
-            <div class="stat"><div id="stat-tracks" class="stat-num">0</div><div class="stat-label">tracks in rotation</div></div>
-            <div class="stat"><div id="stat-seeds" class="stat-num">0</div><div class="stat-label">seed artists</div></div>
-          </div>
-
-          <div class="side-block">
-            <span class="section-label">New vs. familiar</span>
-            <div class="ratio-row">
-              <input type="range" id="ratio-slider" min="0" max="100" step="5" value="65" />
-              <span id="ratio-value">65% new</span>
-            </div>
-            <p class="ratio-hint">
-              How often the engine reaches for a deep cut you haven't saved
-              instead of a song already in your rotation. Applies to the
-              next pick — no restart needed.
-            </p>
-          </div>
-
-          <div class="side-block">
-            <span class="section-label">Add a taste seed</span>
-            <form id="seed-form">
-              <input type="text" id="seed-input" placeholder="Artist name" />
-              <button type="submit" class="btn btn-secondary">Add</button>
-            </form>
-            <div id="seed-status" class="hint-text"></div>
-          </div>
-
-          <div class="side-block">
-            <span class="section-label">Playback device</span>
-            <div class="device-row">
-              <select id="device-select"><option>Loading devices...</option></select>
-              <button id="refresh-devices-btn" class="btn btn-ghost">Refresh</button>
-            </div>
-          </div>
+        <div id="log-panel" class="hidden">
+          <pre id="log"></pre>
         </div>
       </div>
 
-      <div class="log-toggle">
-        <button id="toggle-log-btn" class="btn btn-ghost">Show technical log</button>
-      </div>
-      <div id="log-panel" class="hidden">
-        <pre id="log"></pre>
+      <div id="stats-view" class="hidden">
+        <div class="stats-header">
+          <p class="section-label" style="margin:0">
+            <span class="stats-title-row">
+              Your Spotify stats
+              <img src="icons/spotify-icon-black.svg" alt="Spotify" class="spotify-mark" />
+            </span>
+            <span class="stats-caveat">— rank + Spotify's global popularity score, not personal play counts (Spotify doesn't expose those via the API)</span>
+          </p>
+          <div class="seg-control" id="stats-range">
+            <button type="button" class="seg-opt" data-range="short_term">Last 4 weeks</button>
+            <button type="button" class="seg-opt active" data-range="medium_term">Last 6 months</button>
+            <button type="button" class="seg-opt" data-range="long_term">All time</button>
+          </div>
+        </div>
+
+        <div class="dsk-cols">
+          <div>
+            <p class="section-label">Top artists</p>
+            <div id="top-artists-list" class="dsk-feed-list">
+              <p class="feed-empty">Loading...</p>
+            </div>
+          </div>
+          <div>
+            <p class="section-label">Top songs</p>
+            <div id="top-tracks-list" class="dsk-feed-list">
+              <p class="feed-empty">Loading...</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <footer>
@@ -124,10 +166,10 @@
   </div>
 </div>
 
-<script src="config.js?v=20260809"></script>
-<script src="auth.js?v=20260809"></script>
-<script src="spotify.js?v=20260809"></script>
-<script src="station.js?v=20260809"></script>
-<script src="app.js?v=20260809"></script>
+<script src="config.js?v=20260811"></script>
+<script src="auth.js?v=20260811"></script>
+<script src="spotify.js?v=20260811"></script>
+<script src="station.js?v=20260811"></script>
+<script src="app.js?v=20260811"></script>
 </body>
 </html>

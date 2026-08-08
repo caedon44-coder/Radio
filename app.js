@@ -3,11 +3,22 @@
 let selectedDeviceId = null;
 let pollTimer = null;
 let upcomingFeed = []; // [{ uri, name, artist, image, origin }] - what we've actually queued
+let lastKnownPlayingUri = null; // used to detect when Spotify has moved on to a new track
+let engineStarted = false; // true once Start Engine has completed successfully at least once
 
 const $ = (id) => document.getElementById(id);
 
 function show(el) { el.classList.remove("hidden"); }
 function hide(el) { el.classList.add("hidden"); }
+
+// Builds an open.spotify.com link from a spotify:type:id URI, per Spotify's
+// design guidelines requirement that displayed metadata link back to the
+// Spotify service.
+function spotifyOpenUrl(uri) {
+  const parts = uri?.split(":");
+  if (!parts || parts.length !== 3) return null;
+  return `https://open.spotify.com/${parts[1]}/${parts[2]}`;
+}
 
 // ---- VU meter ----
 // This app remote-controls Spotify on another device (Spotify Connect), so
@@ -81,6 +92,58 @@ async function updateVuProfile(uri) {
   startVu();
 }
 
+// ---- Shared "art + name/sub" row, used by the up-next feed and stats lists ----
+// When a url is supplied the card renders as a link out to Spotify (design
+// guidelines: displayed Spotify metadata must link back to the service).
+function buildCard({ rank, image, name, sub, tagText, tagClass, url }) {
+  const card = document.createElement(url ? "a" : "div");
+  card.className = "feed-card";
+  if (url) {
+    card.href = url;
+    card.target = "_blank";
+    card.rel = "noopener";
+    card.title = "Listen on Spotify";
+  }
+
+  if (rank != null) {
+    const rankEl = document.createElement("span");
+    rankEl.className = "rank-num";
+    rankEl.textContent = rank;
+    card.appendChild(rankEl);
+  }
+
+  const art = document.createElement("div");
+  art.className = "feed-art";
+  if (image) {
+    art.style.backgroundImage = `url("${image}")`;
+    art.style.backgroundSize = "cover";
+  }
+  card.appendChild(art);
+
+  const meta = document.createElement("div");
+  meta.className = "feed-meta";
+  const nameEl = document.createElement("p");
+  nameEl.className = "feed-name";
+  nameEl.textContent = name || "—";
+  nameEl.title = name || "";
+  const subEl = document.createElement("p");
+  subEl.className = "feed-sub";
+  subEl.textContent = sub || "";
+  subEl.title = sub || "";
+  meta.appendChild(nameEl);
+  meta.appendChild(subEl);
+  card.appendChild(meta);
+
+  if (tagText) {
+    const tag = document.createElement("span");
+    tag.className = `tag ${tagClass}`;
+    tag.textContent = tagText;
+    card.appendChild(tag);
+  }
+
+  return card;
+}
+
 // ---- Up-next feed + taste-profile stats ----
 function addToFeed(item) {
   upcomingFeed.push(item);
@@ -100,48 +163,89 @@ function renderFeed() {
   const list = $("feed-list");
   list.innerHTML = "";
   if (upcomingFeed.length === 0) {
-    list.innerHTML = '<p class="feed-empty" id="feed-empty">Nothing queued yet.</p>';
+    list.innerHTML = '<p class="feed-empty">Nothing queued yet.</p>';
     return;
   }
   for (const item of upcomingFeed) {
-    const card = document.createElement("div");
-    card.className = "feed-card";
-
-    const art = document.createElement("div");
-    art.className = "feed-art";
-    if (item.image) {
-      art.style.backgroundImage = `url("${item.image}")`;
-      art.style.backgroundSize = "cover";
-    }
-
-    const meta = document.createElement("div");
-    meta.className = "feed-meta";
-    const name = document.createElement("p");
-    name.className = "feed-name";
-    name.textContent = item.name || "—";
-    const sub = document.createElement("p");
-    sub.className = "feed-sub";
-    sub.textContent = item.artist || "";
-    meta.appendChild(name);
-    meta.appendChild(sub);
-
-    card.appendChild(art);
-    card.appendChild(meta);
-
-    if (item.origin === "fresh") {
-      const tag = document.createElement("span");
-      tag.className = "tag tag-accent-2";
-      tag.textContent = "new";
-      card.appendChild(tag);
-    }
-
-    list.appendChild(card);
+    list.appendChild(
+      buildCard({
+        image: item.image,
+        name: item.name,
+        sub: item.artist,
+        tagText: item.origin === "fresh" ? "new" : null,
+        tagClass: "tag-accent-2",
+        url: spotifyOpenUrl(item.uri)
+      })
+    );
   }
 }
 
 function updateStats() {
   $("stat-tracks").textContent = Station.knownPool.length + Station.freshPool.length;
   $("stat-seeds").textContent = Station.getSeedArtists().length;
+}
+
+// ---- Stats tab ----
+let currentStatsRange = "medium_term";
+
+function switchTab(tab) {
+  const isHome = tab === "home";
+  $("home-view").classList.toggle("hidden", !isHome);
+  $("stats-view").classList.toggle("hidden", isHome);
+  document.querySelectorAll(".dsk-navlink").forEach((el) => {
+    el.classList.toggle("active", el.dataset.tab === tab);
+  });
+  if (!isHome) loadStats(currentStatsRange);
+}
+
+function renderRankList(containerId, items) {
+  const el = $(containerId);
+  el.innerHTML = "";
+  if (items.length === 0) {
+    el.innerHTML = '<p class="feed-empty">Nothing here yet.</p>';
+    return;
+  }
+  for (const item of items) {
+    el.appendChild(buildCard(item));
+  }
+}
+
+async function loadStats(range) {
+  currentStatsRange = range;
+  $("top-artists-list").innerHTML = '<p class="feed-empty">Loading...</p>';
+  $("top-tracks-list").innerHTML = '<p class="feed-empty">Loading...</p>';
+  try {
+    const [artists, tracks] = await Promise.all([
+      Spotify.getTopItems("artists", range, 10),
+      Spotify.getTopItems("tracks", range, 10)
+    ]);
+
+    renderRankList(
+      "top-artists-list",
+      (artists?.items || []).map((a, i) => ({
+        rank: i + 1,
+        image: albumImage(a.images),
+        name: a.name,
+        sub: `Popularity ${a.popularity ?? "—"}${a.genres?.length ? " · " + a.genres.slice(0, 2).join(", ") : ""}`,
+        url: a.external_urls?.spotify
+      }))
+    );
+
+    renderRankList(
+      "top-tracks-list",
+      (tracks?.items || []).map((t, i) => ({
+        rank: i + 1,
+        image: albumImage(t.album?.images),
+        name: t.name,
+        sub: `${t.artists?.[0]?.name || ""} · Popularity ${t.popularity ?? "—"}`,
+        url: t.external_urls?.spotify
+      }))
+    );
+  } catch (e) {
+    Station.log(`Stats unavailable: ${e.message}`);
+    $("top-artists-list").innerHTML = '<p class="feed-empty">Couldn\'t load stats.</p>';
+    $("top-tracks-list").innerHTML = '<p class="feed-empty">Couldn\'t load stats.</p>';
+  }
 }
 
 async function init() {
@@ -241,6 +345,22 @@ function wireControls() {
       $("log-panel").classList.toggle("hidden");
     });
   });
+
+  wireOne("nav tabs", () => {
+    document.querySelectorAll(".dsk-navlink").forEach((link) => {
+      link.addEventListener("click", () => switchTab(link.dataset.tab));
+    });
+  });
+
+  wireOne("stats range control", () => {
+    document.querySelectorAll("#stats-range .seg-opt").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#stats-range .seg-opt").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        loadStats(btn.dataset.range);
+      });
+    });
+  });
 }
 
 async function loadDevices() {
@@ -284,6 +404,29 @@ function setOnAir(isOn) {
   else stopVu();
 }
 
+// Spotify's design guidelines require respecting playback restrictions
+// (e.g. Free-tier accounts can't always skip/previous on demand) rather
+// than always showing every control as available - disallowed actions get
+// disabled instead of just failing silently when clicked.
+function applyPlaybackRestrictions(disallows = {}) {
+  $("prev-btn").disabled = !engineStarted || !!disallows.skipping_prev;
+  $("next-btn").disabled = !engineStarted || !!disallows.skipping_next;
+  const cantToggle = isOnAir ? disallows.pausing : disallows.resuming;
+  $("play-pause-btn").disabled = !engineStarted || !!cantToggle;
+}
+
+async function refreshPlaybackRestrictions() {
+  try {
+    const state = await Spotify.getPlaybackState();
+    applyPlaybackRestrictions(state?.actions?.disallows || {});
+  } catch (e) {
+    // If we can't check, default to enabled rather than stuck disabled -
+    // the underlying Spotify call will just fail safely if it really is
+    // restricted, and that failure gets logged like any other.
+    applyPlaybackRestrictions({});
+  }
+}
+
 async function togglePlayPause() {
   const action = isOnAir ? "Pause" : "Resume";
   Station.log(`${action}: sending ${isOnAir ? "pause" : "play"} command to Spotify...`);
@@ -316,7 +459,9 @@ function renderNowPlaying(item) {
   $("np-badge").textContent = isNew ? "NEW" : "FAMILIAR";
   $("np-badge").className = `tag ${isNew ? "tag-accent-2" : "tag-accent"}`;
   $("np-title").textContent = item.name || "—";
+  $("np-title").title = item.name || "";
   $("np-subtitle").textContent = item.artist || "";
+  $("np-subtitle").title = item.artist || "";
 
   const art = $("np-art");
   if (item.image) {
@@ -326,9 +471,32 @@ function renderNowPlaying(item) {
     hide(art);
   }
 
+  const spotifyLink = $("np-spotify-link");
+  const openUrl = spotifyOpenUrl(item.uri);
+  if (openUrl) {
+    spotifyLink.href = openUrl;
+    show(spotifyLink);
+  } else {
+    hide(spotifyLink);
+  }
+
   if (item.uri) {
     removeFromFeed(item.uri);
     updateVuProfile(item.uri);
+  }
+}
+
+// Spotify's API has no direct "clear queue" endpoint. Draining by skipping
+// through whatever's already queued (checking after each skip) is the only
+// way to actually guarantee a clean slate before we queue our own picks -
+// otherwise leftover tracks from a previous session, or whatever was
+// already lined up on the device, can end up mixed in with the new mix.
+async function clearSpotifyQueue(maxSkips = 15) {
+  for (let i = 0; i < maxSkips; i++) {
+    const queue = await Spotify.getCurrentQueue();
+    const upcoming = queue?.queue?.length || 0;
+    if (upcoming === 0) break;
+    await Spotify.skipNext();
   }
 }
 
@@ -350,8 +518,19 @@ async function startStation() {
 
     await Spotify.transferPlayback(selectedDeviceId, false);
     await new Promise((r) => setTimeout(r, 800)); // let transfer settle
+
+    try {
+      Station.log("Clearing existing Spotify queue...");
+      await clearSpotifyQueue();
+    } catch (e) {
+      Station.log(`Couldn't fully clear the queue, continuing anyway: ${e.message}`);
+    }
+
     await Spotify.startPlayback(selectedDeviceId, [first.uri]);
     Station.remember(first.uri);
+    lastKnownPlayingUri = first.uri;
+    upcomingFeed = [];
+    renderFeed();
     setOnAir(true);
     renderNowPlaying(first);
 
@@ -372,9 +551,8 @@ async function startStation() {
     }
 
     $("start-btn").textContent = "Restart Engine";
-    $("prev-btn").disabled = false;
-    $("play-pause-btn").disabled = false;
-    $("next-btn").disabled = false;
+    engineStarted = true;
+    await refreshPlaybackRestrictions();
     startPolling();
   } catch (e) {
     Station.log(`Couldn't start engine: ${e.message}`);
@@ -398,7 +576,12 @@ async function skipTrack() {
 async function topUpQueue() {
   try {
     const state = await Spotify.getPlaybackState();
+    let trackChanged = false;
+
     if (state?.item) {
+      trackChanged = state.item.uri !== lastKnownPlayingUri;
+      lastKnownPlayingUri = state.item.uri;
+
       Station.log(
         `Spotify reports now playing: "${state.item.name}" — ${state.item.artists?.[0]?.name || "?"} (${state.is_playing ? "playing" : "paused"})`
       );
@@ -410,13 +593,19 @@ async function topUpQueue() {
         origin: Station.originByUri[state.item.uri]
       });
       setOnAir(state.is_playing);
+      applyPlaybackRestrictions(state.actions?.disallows || {});
     } else {
       Station.log("Spotify reports no active playback.");
     }
 
     const queue = await Spotify.getCurrentQueue();
     const upcoming = queue?.queue?.length || 0;
-    if (upcoming < 3) {
+
+    // Add exactly one replacement track once the current song has changed
+    // (finished naturally, was skipped, or went to the previous track) -
+    // plus a low-buffer safety net in case the queue ever runs dry without
+    // a track-change to notice it by (e.g. right after starting up).
+    if (trackChanged || upcoming < 3) {
       const next = Station.pickNext();
       if (next) {
         await Spotify.addToQueue(next.uri, selectedDeviceId);

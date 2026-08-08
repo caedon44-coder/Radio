@@ -79,6 +79,29 @@ html, body {
   line-height: 1.5;
 }
 
+/* ---- Spotify attribution (per developer.spotify.com/documentation/design) ----
+   Full logo min width 70px digital; icon min 21px digital; black logo on
+   light backgrounds (this app's whole theme is light, so black only). */
+.spotify-attribution-logo {
+  width: 110px;
+  height: auto;
+  margin-top: 10px; /* clear space isolating it from surrounding elements */
+}
+.spotify-mark {
+  height: 24px;
+  width: auto;
+  flex: none;
+}
+.spotify-text-link {
+  align-self: flex-start;
+  font: 600 11px ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-700);
+  text-decoration: none;
+}
+.spotify-text-link:hover { text-decoration: underline; }
+
 /* ---- Buttons ---- */
 button {
   font-family: var(--font-body);
@@ -130,11 +153,13 @@ button:disabled { opacity: 0.5; cursor: default; }
   flex-direction: column;
   gap: 18px;
 }
+.dsk-nav-links { display: flex; flex-direction: column; gap: 4px; }
 .dsk-navlink {
   font: 500 14px var(--font-body);
   color: var(--color-neutral-700);
   padding: 8px 10px;
   border-radius: 10px;
+  cursor: pointer;
 }
 .dsk-navlink.active {
   background: var(--color-accent-100);
@@ -156,6 +181,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   width: 100%;
   justify-self: center;
 }
+#home-view, #stats-view { display: flex; flex-direction: column; gap: 28px; }
 
 .onair {
   display: flex;
@@ -197,7 +223,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 .dsk-art {
   width: 180px;
   height: 180px;
-  border-radius: var(--radius-lg);
+  /* Spotify album artwork corner radius spec: 8px large devices, 4px
+     small/medium (see mobile override below) - kept separate from this
+     app's own --radius-lg, which is for our own UI chrome, not their art. */
+  border-radius: 8px;
   background: linear-gradient(135deg, var(--color-accent-100), var(--color-accent-2-100));
   object-fit: cover;
   flex: none;
@@ -209,6 +238,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   flex: 1;
   min-width: 0;
 }
+.np-badge-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .np-title {
   font: 400 30px var(--font-heading);
   color: var(--color-text);
@@ -281,10 +311,12 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
+a.feed-card { text-decoration: none; color: inherit; }
+a.feed-card:hover { box-shadow: var(--shadow-md); }
 .feed-art {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 8px; /* Spotify artwork corner radius spec - see .dsk-art */
   background: linear-gradient(135deg, var(--color-accent-100), var(--color-accent-2-100));
   object-fit: cover;
   flex: none;
@@ -311,6 +343,48 @@ button:disabled { opacity: 0.5; cursor: default; }
   color: var(--color-neutral-700);
   margin: 0;
 }
+.rank-num {
+  font: 700 16px var(--font-heading);
+  color: var(--color-accent-700);
+  width: 22px;
+  flex: none;
+  text-align: center;
+}
+
+/* Stats tab */
+.stats-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stats-title-row { display: inline-flex; align-items: center; gap: 8px; }
+.stats-caveat {
+  display: block;
+  font: 12px var(--font-body);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-neutral-700);
+  margin-top: 4px;
+}
+.seg-control {
+  display: flex;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex: none;
+}
+.seg-opt {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: none;
+  border-radius: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
+.seg-opt.active { background: var(--color-accent); color: var(--color-bg); }
 
 .dsk-side-card {
   background: var(--color-bg);
@@ -385,17 +459,21 @@ footer { text-align: center; padding-bottom: 20px; }
 @media (max-width: 900px) {
   .dsk-shell { grid-template-columns: 1fr; }
   .dsk-nav {
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    gap: 10px;
     border-right: none;
     border-bottom: 1px solid var(--color-neutral-300);
-    padding: 16px 20px;
+    padding: 14px 20px;
   }
-  .dsk-navlink, .dsk-greeting { display: none; }
+  .dsk-nav-links { flex-direction: row; }
+  .dsk-greeting { display: none; }
   .dsk-main { padding: 20px; gap: 20px; max-width: none; }
+  #home-view, #stats-view { gap: 20px; }
   .dsk-np { flex-direction: column; padding: 20px; }
-  .dsk-art { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+  .dsk-art { width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 4px; }
+  .feed-art { border-radius: 4px; }
   .ctrl-stack { max-width: none; }
   .dsk-cols { grid-template-columns: 1fr; }
+  .stats-header { flex-direction: column; align-items: flex-start; }
 }
