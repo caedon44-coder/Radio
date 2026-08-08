@@ -175,7 +175,9 @@ function wireControls() {
 
   $("refresh-devices-btn").addEventListener("click", loadDevices);
   $("start-btn").addEventListener("click", startStation);
-  $("skip-btn").addEventListener("click", skipTrack);
+  $("prev-btn").addEventListener("click", previousTrack);
+  $("play-pause-btn").addEventListener("click", togglePlayPause);
+  $("next-btn").addEventListener("click", skipTrack);
 
   $("seed-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -243,8 +245,40 @@ function setOnAir(isOn) {
   $("on-air-dot").classList.toggle("live", isOn);
   $("on-air-label").textContent = isOn ? "ON AIR" : "OFF AIR";
   isOnAir = isOn;
+
+  const playPauseBtn = $("play-pause-btn");
+  playPauseBtn.textContent = isOn ? "⏸" : "▶";
+  playPauseBtn.setAttribute("aria-label", isOn ? "Pause" : "Play");
+
   if (isOn) startVu();
   else stopVu();
+}
+
+async function togglePlayPause() {
+  const action = isOnAir ? "Pause" : "Resume";
+  Station.log(`${action}: sending ${isOnAir ? "pause" : "play"} command to Spotify...`);
+  try {
+    if (isOnAir) {
+      await Spotify.pause();
+    } else {
+      await Spotify.resume();
+    }
+    Station.log(`${action}: command accepted, refreshing playback state...`);
+    await topUpQueue();
+  } catch (e) {
+    Station.log(`${action} failed: ${e.message}`);
+  }
+}
+
+async function previousTrack() {
+  Station.log("Previous: sending skip-to-previous command to Spotify...");
+  try {
+    await Spotify.skipPrevious();
+    Station.log("Previous: command accepted, refreshing playback state...");
+    await topUpQueue();
+  } catch (e) {
+    Station.log(`Previous track failed: ${e.message}`);
+  }
 }
 
 function renderNowPlaying(item) {
@@ -301,7 +335,9 @@ async function startStation() {
     }
 
     $("start-btn").textContent = "Restart Engine";
-    $("skip-btn").disabled = false;
+    $("prev-btn").disabled = false;
+    $("play-pause-btn").disabled = false;
+    $("next-btn").disabled = false;
     startPolling();
   } catch (e) {
     Station.log(`Couldn't start engine: ${e.message}`);
@@ -312,8 +348,10 @@ async function startStation() {
 }
 
 async function skipTrack() {
+  Station.log("Skip: sending skip-to-next command to Spotify...");
   try {
-    await Spotify.skipNext(selectedDeviceId);
+    await Spotify.skipNext();
+    Station.log("Skip: command accepted, refreshing playback state...");
     await topUpQueue();
   } catch (e) {
     Station.log(`Skip failed: ${e.message}`);
@@ -324,6 +362,9 @@ async function topUpQueue() {
   try {
     const state = await Spotify.getPlaybackState();
     if (state?.item) {
+      Station.log(
+        `Spotify reports now playing: "${state.item.name}" — ${state.item.artists?.[0]?.name || "?"} (${state.is_playing ? "playing" : "paused"})`
+      );
       renderNowPlaying({
         uri: state.item.uri,
         name: state.item.name,
@@ -332,6 +373,8 @@ async function topUpQueue() {
         origin: Station.originByUri[state.item.uri]
       });
       setOnAir(state.is_playing);
+    } else {
+      Station.log("Spotify reports no active playback.");
     }
 
     const queue = await Spotify.getCurrentQueue();

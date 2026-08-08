@@ -21,7 +21,17 @@ async function spotifyFetch(path, options = {}) {
     throw new Error(`Spotify API ${res.status} on ${path}: ${errBody}`);
   }
   const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // A 2xx response with a body that isn't valid JSON - seen in practice on
+    // some player-control endpoints. The caller almost never needs this
+    // body (play/pause/queue/skip commands are fire-and-forget), so don't
+    // let a parse hiccup here abort the whole calling flow.
+    console.warn(`Non-JSON response from ${path}:`, text.slice(0, 200));
+    return null;
+  }
 }
 
 const Spotify = {
@@ -76,9 +86,14 @@ const Spotify = {
       method: "POST"
     }),
 
-  skipNext: (deviceId) =>
-    spotifyFetch(`/me/player/next?device_id=${deviceId}`, { method: "POST" }),
-
-  pause: (deviceId) =>
-    spotifyFetch(`/me/player/pause?device_id=${deviceId}`, { method: "PUT" })
+  // No device_id on these transport commands: they target whatever Spotify
+  // currently considers the active device, rather than a device id we
+  // cached at page load that may have gone stale (Spotify Connect sessions
+  // can rotate device ids).
+  skipNext: () => spotifyFetch("/me/player/next", { method: "POST" }),
+  skipPrevious: () => spotifyFetch("/me/player/previous", { method: "POST" }),
+  pause: () => spotifyFetch("/me/player/pause", { method: "PUT" }),
+  // Resumes whatever was already loaded, unlike startPlayback which always
+  // supplies a fresh track list.
+  resume: () => spotifyFetch("/me/player/play", { method: "PUT" })
 };
