@@ -19,10 +19,6 @@ const CONFIG = {
   // live from the dashboard slider; this is just the starting value.
   NEW_TRACK_RATIO: 0.65,
 
-  // How the station mixes content. Every PODCAST_EVERY_N tracks, one
-  // podcast episode is dropped into the queue instead of a song.
-  PODCAST_EVERY_N: 6,
-
   // How many upcoming items the app tries to keep queued on the device.
   QUEUE_TARGET_SIZE: 8,
 

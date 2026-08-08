@@ -2,11 +2,147 @@
 
 let selectedDeviceId = null;
 let pollTimer = null;
+let upcomingFeed = []; // [{ uri, name, artist, image, origin }] - what we've actually queued
 
 const $ = (id) => document.getElementById(id);
 
 function show(el) { el.classList.remove("hidden"); }
 function hide(el) { el.classList.add("hidden"); }
+
+// ---- VU meter ----
+// This app remote-controls Spotify on another device (Spotify Connect), so
+// there's no audio stream in this browser tab to analyze - true waveform
+// reactivity isn't possible here. Instead we pull the current track's actual
+// tempo/energy from Spotify's audio-features endpoint and drive the bars off
+// that. That endpoint is restricted to apps with extended API access as of
+// late 2024, so on a Development Mode app (like this one, by design) it will
+// likely 403 - in which case this quietly falls back to a fixed lively pulse
+// rather than breaking.
+let vuInterval = null;
+let vuBpm = 100;
+let vuEnergy = 0.5;
+let isOnAir = false;
+let lastVuUri = null;
+const audioFeatureCache = {};
+
+function trackIdFromUri(uri) {
+  return uri ? uri.split(":").pop() : null;
+}
+
+function vuTick() {
+  const min = 4;
+  const max = 6 + vuEnergy * 20;
+  document.querySelectorAll("#vu i").forEach((bar) => {
+    bar.style.height = `${Math.round(min + Math.random() * (max - min))}px`;
+  });
+}
+
+function startVu() {
+  clearInterval(vuInterval);
+  vuInterval = null;
+  if (!isOnAir) return;
+  vuTick();
+  const beatMs = Math.max(90, 60000 / vuBpm / 2);
+  vuInterval = setInterval(vuTick, beatMs);
+}
+
+function stopVu() {
+  clearInterval(vuInterval);
+  vuInterval = null;
+  document.querySelectorAll("#vu i").forEach((bar) => { bar.style.height = "4px"; });
+}
+
+async function updateVuProfile(uri) {
+  if (!uri || uri === lastVuUri) return;
+  lastVuUri = uri;
+  const id = trackIdFromUri(uri);
+
+  if (audioFeatureCache[id]) {
+    vuBpm = audioFeatureCache[id].tempo;
+    vuEnergy = audioFeatureCache[id].energy;
+    startVu();
+    return;
+  }
+
+  try {
+    const features = await Spotify.getAudioFeatures(id);
+    const profile = {
+      tempo: Math.min(200, Math.max(60, features?.tempo || 100)),
+      energy: features?.energy ?? 0.5
+    };
+    audioFeatureCache[id] = profile;
+    vuBpm = profile.tempo;
+    vuEnergy = profile.energy;
+  } catch (e) {
+    Station.log(`Audio features unavailable, using default pulse: ${e.message}`);
+    vuBpm = 100;
+    vuEnergy = 0.5;
+  }
+  startVu();
+}
+
+// ---- Up-next feed + taste-profile stats ----
+function addToFeed(item) {
+  upcomingFeed.push(item);
+  if (upcomingFeed.length > 8) upcomingFeed.shift();
+  renderFeed();
+}
+
+function removeFromFeed(uri) {
+  const next = upcomingFeed.filter((t) => t.uri !== uri);
+  if (next.length !== upcomingFeed.length) {
+    upcomingFeed = next;
+    renderFeed();
+  }
+}
+
+function renderFeed() {
+  const list = $("feed-list");
+  list.innerHTML = "";
+  if (upcomingFeed.length === 0) {
+    list.innerHTML = '<p class="feed-empty" id="feed-empty">Nothing queued yet.</p>';
+    return;
+  }
+  for (const item of upcomingFeed) {
+    const card = document.createElement("div");
+    card.className = "feed-card";
+
+    const art = document.createElement("div");
+    art.className = "feed-art";
+    if (item.image) {
+      art.style.backgroundImage = `url("${item.image}")`;
+      art.style.backgroundSize = "cover";
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "feed-meta";
+    const name = document.createElement("p");
+    name.className = "feed-name";
+    name.textContent = item.name || "—";
+    const sub = document.createElement("p");
+    sub.className = "feed-sub";
+    sub.textContent = item.artist || "";
+    meta.appendChild(name);
+    meta.appendChild(sub);
+
+    card.appendChild(art);
+    card.appendChild(meta);
+
+    if (item.origin === "fresh") {
+      const tag = document.createElement("span");
+      tag.className = "tag tag-accent-2";
+      tag.textContent = "new";
+      card.appendChild(tag);
+    }
+
+    list.appendChild(card);
+  }
+}
+
+function updateStats() {
+  $("stat-tracks").textContent = Station.knownPool.length + Station.freshPool.length;
+  $("stat-seeds").textContent = Station.getSeedArtists().length;
+}
 
 async function init() {
   if (!isLoggedIn()) {
@@ -51,6 +187,7 @@ function wireControls() {
       const found = await Station.addSeedArtist(name);
       $("seed-status").textContent = `Added "${found}" to your rotation.`;
       input.value = "";
+      updateStats();
     } catch (err) {
       $("seed-status").textContent = err.message;
     }
@@ -105,22 +242,30 @@ async function loadDevices() {
 function setOnAir(isOn) {
   $("on-air-dot").classList.toggle("live", isOn);
   $("on-air-label").textContent = isOn ? "ON AIR" : "OFF AIR";
+  isOnAir = isOn;
+  if (isOn) startVu();
+  else stopVu();
 }
 
-function renderNowPlaying(kind, item) {
-  let badgeText = "FAMILIAR";
-  let badgeClass = "badge-familiar";
-  if (kind === "episode") {
-    badgeText = "PODCAST";
-    badgeClass = "badge-podcast";
-  } else if (item.origin === "fresh") {
-    badgeText = "NEW";
-    badgeClass = "badge-new";
-  }
-  $("np-badge").textContent = badgeText;
-  $("np-badge").className = `badge ${badgeClass}`;
+function renderNowPlaying(item) {
+  const isNew = item.origin === "fresh";
+  $("np-badge").textContent = isNew ? "NEW" : "FAMILIAR";
+  $("np-badge").className = `tag ${isNew ? "tag-accent-2" : "tag-accent"}`;
   $("np-title").textContent = item.name || "—";
-  $("np-subtitle").textContent = kind === "episode" ? item.show : item.artist;
+  $("np-subtitle").textContent = item.artist || "";
+
+  const art = $("np-art");
+  if (item.image) {
+    art.src = item.image;
+    show(art);
+  } else {
+    hide(art);
+  }
+
+  if (item.uri) {
+    removeFromFeed(item.uri);
+    updateVuProfile(item.uri);
+  }
 }
 
 async function startStation() {
@@ -134,24 +279,25 @@ async function startStation() {
 
   try {
     await Station.refillPools();
+    updateStats();
 
     const first = Station.pickNext();
     if (!first) throw new Error("Couldn't find anything to play. Try adding a seed artist.");
 
-    const firstUri = first.item.uri;
     await Spotify.transferPlayback(selectedDeviceId, false);
     await new Promise((r) => setTimeout(r, 800)); // let transfer settle
-    await Spotify.startPlayback(selectedDeviceId, [firstUri]);
-    Station.remember(firstUri);
-    renderNowPlaying(first.type, first.item);
+    await Spotify.startPlayback(selectedDeviceId, [first.uri]);
+    Station.remember(first.uri);
     setOnAir(true);
+    renderNowPlaying(first);
 
     // Queue up a handful more behind it
     for (let i = 0; i < CONFIG.QUEUE_TARGET_SIZE - 1; i++) {
       const next = Station.pickNext();
       if (!next) break;
-      await Spotify.addToQueue(next.item.uri, selectedDeviceId);
-      Station.remember(next.item.uri);
+      await Spotify.addToQueue(next.uri, selectedDeviceId);
+      Station.remember(next.uri);
+      addToFeed(next);
     }
 
     $("start-btn").textContent = "Restart Engine";
@@ -178,12 +324,13 @@ async function topUpQueue() {
   try {
     const state = await Spotify.getPlaybackState();
     if (state?.item) {
-      const kind = state.currently_playing_type === "episode" ? "episode" : "track";
-      const name = state.item.name;
-      const subtitle =
-        kind === "episode" ? state.item.show?.name : state.item.artists?.[0]?.name;
-      const origin = Station.originByUri[state.item.uri];
-      renderNowPlaying(kind, { name, artist: subtitle, show: subtitle, origin });
+      renderNowPlaying({
+        uri: state.item.uri,
+        name: state.item.name,
+        artist: state.item.artists?.[0]?.name,
+        image: albumImage(state.item.album?.images),
+        origin: Station.originByUri[state.item.uri]
+      });
       setOnAir(state.is_playing);
     }
 
@@ -192,12 +339,14 @@ async function topUpQueue() {
     if (upcoming < 3) {
       const next = Station.pickNext();
       if (next) {
-        await Spotify.addToQueue(next.item.uri, selectedDeviceId);
-        Station.remember(next.item.uri);
+        await Spotify.addToQueue(next.uri, selectedDeviceId);
+        Station.remember(next.uri);
+        addToFeed(next);
       }
       if (Station.knownPool.length + Station.freshPool.length < 5) {
         await Station.refillPools();
       }
+      updateStats();
     }
   } catch (e) {
     Station.log(`Queue check failed: ${e.message}`);

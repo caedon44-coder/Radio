@@ -34,18 +34,17 @@ const Spotify = {
   // Library
   getSavedTracks: (limit = 20, offset = 0) =>
     spotifyFetch(`/me/tracks?limit=${limit}&offset=${offset}`),
-  getSavedShows: (limit = 20, offset = 0) =>
-    spotifyFetch(`/me/shows?limit=${limit}&offset=${offset}`),
   // Returns booleans in the same order as ids (max 50 ids per call).
   checkSavedTracks: (ids) => spotifyFetch(`/me/tracks/contains?ids=${ids.join(",")}`),
 
   // Catalog
-  getShowEpisodes: (showId, limit = 10) =>
-    spotifyFetch(`/shows/${showId}/episodes?limit=${limit}`),
   getArtistAlbums: (artistId, limit = 10) =>
     spotifyFetch(`/artists/${artistId}/albums?limit=${limit}&include_groups=album,single`),
   getAlbumTracks: (albumId, limit = 20) =>
     spotifyFetch(`/albums/${albumId}/tracks?limit=${limit}`),
+  // Tempo/energy for the VU meter. Restricted to apps with extended API
+  // access as of late 2024 - expect this to 403 in Development Mode.
+  getAudioFeatures: (trackId) => spotifyFetch(`/audio-features/${trackId}`),
 
   // Search (max limit is 10 as of Feb 2026)
   search: (query, types, limit = 10) =>

@@ -6,90 +6,118 @@
 <title>Taste Engine</title>
 <link rel="manifest" href="manifest.json" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
 <div id="login-screen" class="screen">
-  <div class="dial">Taste Engine</div>
-  <p class="tagline">
-    Built from your own Spotify library, tuned to favor deep cuts you
-    haven't saved yet — from artists you already listen to — over songs
-    you already know. You control the ratio.
-  </p>
-  <button id="login-btn" class="btn-primary">Connect Spotify</button>
+  <div class="login-card">
+    <span class="dial">TASTE ENGINE</span>
+    <p class="tagline">
+      Built from your own Spotify library, tuned to favor deep cuts you
+      haven't saved yet — from artists you already listen to — over songs
+      you already know. You control the ratio.
+    </p>
+    <button id="login-btn" class="btn btn-primary btn-block">Connect Spotify</button>
+  </div>
 </div>
 
 <div id="dashboard" class="screen hidden">
-  <div class="header-row">
-    <div class="dial">Taste Engine</div>
-    <div class="on-air">
-      <div id="on-air-dot" class="on-air-dot"></div>
-      <span id="on-air-label">OFF AIR</span>
+  <div class="dsk-shell">
+    <div class="dsk-nav">
+      <span class="dial">TASTE ENGINE</span>
+      <span class="dsk-navlink active">Home</span>
+      <p id="greeting" class="dsk-greeting"></p>
+    </div>
+
+    <div class="dsk-main">
+      <div class="onair" style="align-self:flex-end">
+        <div id="on-air-dot" class="dot"></div>
+        <span id="on-air-label">OFF AIR</span>
+      </div>
+
+      <div class="dsk-np">
+        <img id="np-art" class="dsk-art hidden" alt="" />
+        <div class="dsk-np-body">
+          <span id="np-badge" class="tag tag-accent">FAMILIAR</span>
+          <div>
+            <p id="np-title" class="np-title">Nothing playing yet</p>
+            <p id="np-subtitle" class="np-sub">Hit start to tune in</p>
+          </div>
+          <div class="vu" id="vu">
+            <i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <div class="ctrl-row">
+            <button id="skip-btn" class="btn btn-secondary btn-block" disabled>Skip</button>
+            <button id="start-btn" class="btn btn-primary btn-block">Start Engine</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="dsk-cols">
+        <div>
+          <p class="section-label">Up next in your rotation</p>
+          <div id="feed-list" class="dsk-feed-list">
+            <p class="feed-empty" id="feed-empty">Nothing queued yet.</p>
+          </div>
+        </div>
+
+        <div class="dsk-side-card">
+          <p class="section-label">Your taste profile</p>
+          <div class="stat-row">
+            <div class="stat"><div id="stat-tracks" class="stat-num">0</div><div class="stat-label">tracks in rotation</div></div>
+            <div class="stat"><div id="stat-seeds" class="stat-num">0</div><div class="stat-label">seed artists</div></div>
+          </div>
+
+          <div class="side-block">
+            <span class="section-label">New vs. familiar</span>
+            <div class="ratio-row">
+              <input type="range" id="ratio-slider" min="0" max="100" step="5" value="65" />
+              <span id="ratio-value">65% new</span>
+            </div>
+            <p class="ratio-hint">
+              How often the engine reaches for a deep cut you haven't saved
+              instead of a song already in your rotation. Applies to the
+              next pick — no restart needed.
+            </p>
+          </div>
+
+          <div class="side-block">
+            <span class="section-label">Add a taste seed</span>
+            <form id="seed-form">
+              <input type="text" id="seed-input" placeholder="Artist name" />
+              <button type="submit" class="btn btn-secondary">Add</button>
+            </form>
+            <div id="seed-status" class="hint-text"></div>
+          </div>
+
+          <div class="side-block">
+            <span class="section-label">Playback device</span>
+            <div class="device-row">
+              <select id="device-select"><option>Loading devices...</option></select>
+              <button id="refresh-devices-btn" class="btn btn-ghost">Refresh</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="log-toggle">
+        <button id="toggle-log-btn" class="btn btn-ghost">Show technical log</button>
+      </div>
+      <div id="log-panel" class="hidden">
+        <pre id="log"></pre>
+      </div>
+
+      <footer>
+        <button id="logout-btn" class="btn btn-ghost">Disconnect Spotify</button>
+      </footer>
     </div>
   </div>
-
-  <p id="greeting"></p>
-
-  <div class="now-playing">
-    <span id="np-badge" class="badge badge-familiar">FAMILIAR</span>
-    <div>
-      <p id="np-title">Nothing playing yet</p>
-      <p id="np-subtitle">Hit start to tune in</p>
-    </div>
-    <div class="vu-meter">
-      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
-      <div class="bar"></div><div class="bar"></div>
-    </div>
-  </div>
-
-  <div class="controls-row">
-    <button id="start-btn" class="btn-primary">Start Engine</button>
-    <button id="skip-btn" class="btn-secondary" disabled>Skip</button>
-  </div>
-
-  <div class="panel">
-    <span class="panel-label">Playback device</span>
-    <div class="device-row">
-      <select id="device-select"><option>Loading devices...</option></select>
-      <button id="refresh-devices-btn" class="btn-ghost">Refresh</button>
-    </div>
-  </div>
-
-  <div class="panel">
-    <span class="panel-label">New vs. familiar</span>
-    <div class="ratio-row">
-      <input type="range" id="ratio-slider" min="0" max="100" step="5" value="65" />
-      <span id="ratio-value">65% new</span>
-    </div>
-    <p class="ratio-hint">
-      How often the engine reaches for deep cuts you haven't saved, from
-      artists you already listen to, instead of songs already in your
-      rotation. Takes effect on the next pick — no restart needed.
-    </p>
-  </div>
-
-  <div class="panel">
-    <span class="panel-label">Add a taste seed</span>
-    <form id="seed-form">
-      <input type="text" id="seed-input" placeholder="Artist name" />
-      <button type="submit" class="btn-secondary">Add</button>
-    </form>
-    <div id="seed-status"></div>
-  </div>
-
-  <div class="log-toggle">
-    <button id="toggle-log-btn" class="btn-ghost">Show technical log</button>
-  </div>
-  <div id="log-panel" class="hidden">
-    <pre id="log"></pre>
-  </div>
-
-  <footer>
-    <button id="logout-btn" class="btn-ghost">Disconnect Spotify</button>
-  </footer>
 </div>
 
 <script src="config.js"></script>

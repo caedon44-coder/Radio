@@ -4,9 +4,8 @@ A personal discovery engine built from your own Spotify library. Unlike
 Spotify's own DJ, it's tuned to lean into deep cuts you haven't saved yet —
 pulled from artists you already listen to — rather than replaying songs you
 already know. A slider on the dashboard controls exactly how new-vs-familiar
-the mix should be, live, no restart needed. Podcast episodes from shows you
-follow get mixed in too. Everything streams to your phone via Spotify
-Connect.
+the mix should be, live, no restart needed. Everything streams to your phone
+via Spotify Connect.
 
 ## 1. Update your Spotify app's redirect URI
 
@@ -79,9 +78,18 @@ Every pick, the engine flips a weighted coin (the slider) between two pools:
   have saved" — not a Spotify recommendation, since Spotify retired the
   `/recommendations` endpoint in late 2024.
 
-Podcast episodes from shows you follow are mixed in on top of that, every
-`PODCAST_EVERY_N` tracks (in [config.js](radio-app/config.js)), independent
-of the new/familiar ratio.
+Each pick shows its album art and a badge (**NEW** or **FAMILIAR**) so you
+can see at a glance which pool it came from. The "Up next in your rotation"
+list and the "Your taste profile" stats (tracks in rotation, seed artists)
+reflect what's actually queued and in your pools — not placeholder numbers.
+
+The VU meter bars are driven by the current track's actual tempo/energy via
+Spotify's audio-features endpoint when available. That endpoint requires
+extended API access that Development Mode apps typically don't have, so on
+most personal setups it'll quietly fall back to a fixed lively pulse instead
+of a per-song one — there's no way around this without switching the app to
+play audio in-browser via Spotify's Web Playback SDK, a bigger architecture
+change (and Premium-only).
 
 ## Good to know
 
