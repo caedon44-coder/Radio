@@ -166,50 +166,80 @@ async function init() {
   await loadDevices();
 }
 
+// Runs a single piece of control-wiring in isolation. A missing element
+// (e.g. a stale cached app.js paired with a newer index.html after a
+// deploy) throws and would otherwise silently abort every remaining
+// listener in wireControls() - each block gets its own try/catch instead,
+// so one bad ID doesn't take the rest of the UI down with it.
+function wireOne(label, fn) {
+  try {
+    fn();
+  } catch (e) {
+    console.error(`Failed to wire up ${label}:`, e);
+    Station.log(`UI setup problem (${label}): ${e.message}. Try a hard refresh.`);
+  }
+}
+
 function wireControls() {
-  $("logout-btn").addEventListener("click", () => {
-    clearInterval(pollTimer);
-    logout();
-    window.location.reload();
+  wireOne("logout button", () => {
+    $("logout-btn").addEventListener("click", () => {
+      clearInterval(pollTimer);
+      logout();
+      window.location.reload();
+    });
   });
 
-  $("refresh-devices-btn").addEventListener("click", loadDevices);
-  $("start-btn").addEventListener("click", startStation);
-  $("prev-btn").addEventListener("click", previousTrack);
-  $("play-pause-btn").addEventListener("click", togglePlayPause);
-  $("next-btn").addEventListener("click", skipTrack);
-
-  $("seed-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const input = $("seed-input");
-    const name = input.value.trim();
-    if (!name) return;
-    $("seed-status").textContent = "Adding...";
-    try {
-      const found = await Station.addSeedArtist(name);
-      $("seed-status").textContent = `Added "${found}" to your rotation.`;
-      input.value = "";
-      updateStats();
-    } catch (err) {
-      $("seed-status").textContent = err.message;
-    }
+  wireOne("device refresh button", () => {
+    $("refresh-devices-btn").addEventListener("click", loadDevices);
   });
 
-  const ratioSlider = $("ratio-slider");
-  const updateRatioLabel = (pct) => {
-    $("ratio-value").textContent = `${pct}% new`;
-  };
-  const initialPct = Math.round(Station.getNewRatio() * 100);
-  ratioSlider.value = initialPct;
-  updateRatioLabel(initialPct);
-  ratioSlider.addEventListener("input", () => {
-    const pct = Number(ratioSlider.value);
-    Station.setNewRatio(pct / 100);
-    updateRatioLabel(pct);
+  wireOne("start button", () => {
+    $("start-btn").addEventListener("click", startStation);
   });
 
-  $("toggle-log-btn").addEventListener("click", () => {
-    $("log-panel").classList.toggle("hidden");
+  wireOne("transport pad", () => {
+    $("prev-btn").addEventListener("click", previousTrack);
+    $("play-pause-btn").addEventListener("click", togglePlayPause);
+    $("next-btn").addEventListener("click", skipTrack);
+  });
+
+  wireOne("seed form", () => {
+    $("seed-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = $("seed-input");
+      const name = input.value.trim();
+      if (!name) return;
+      $("seed-status").textContent = "Adding...";
+      try {
+        const found = await Station.addSeedArtist(name);
+        $("seed-status").textContent = `Added "${found}" to your rotation.`;
+        input.value = "";
+        updateStats();
+      } catch (err) {
+        $("seed-status").textContent = err.message;
+      }
+    });
+  });
+
+  wireOne("ratio slider", () => {
+    const ratioSlider = $("ratio-slider");
+    const updateRatioLabel = (pct) => {
+      $("ratio-value").textContent = `${pct}% new`;
+    };
+    const initialPct = Math.round(Station.getNewRatio() * 100);
+    ratioSlider.value = initialPct;
+    updateRatioLabel(initialPct);
+    ratioSlider.addEventListener("input", () => {
+      const pct = Number(ratioSlider.value);
+      Station.setNewRatio(pct / 100);
+      updateRatioLabel(pct);
+    });
+  });
+
+  wireOne("technical log toggle", () => {
+    $("toggle-log-btn").addEventListener("click", () => {
+      $("log-panel").classList.toggle("hidden");
+    });
   });
 }
 
@@ -325,13 +355,20 @@ async function startStation() {
     setOnAir(true);
     renderNowPlaying(first);
 
-    // Queue up a handful more behind it
+    // Queue up a handful more behind it. The main track is already playing
+    // at this point, so a failure queueing an extra track shouldn't abort
+    // startup and leave the transport controls stuck disabled - log it and
+    // keep going instead.
     for (let i = 0; i < CONFIG.QUEUE_TARGET_SIZE - 1; i++) {
       const next = Station.pickNext();
       if (!next) break;
-      await Spotify.addToQueue(next.uri, selectedDeviceId);
-      Station.remember(next.uri);
-      addToFeed(next);
+      try {
+        await Spotify.addToQueue(next.uri, selectedDeviceId);
+        Station.remember(next.uri);
+        addToFeed(next);
+      } catch (e) {
+        Station.log(`Couldn't queue "${next.name}": ${e.message}`);
+      }
     }
 
     $("start-btn").textContent = "Restart Engine";

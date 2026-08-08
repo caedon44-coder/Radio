@@ -154,7 +154,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   gap: 28px;
   max-width: 1100px;
   width: 100%;
-  margin: 0 auto;
+  justify-self: center;
 }
 
 .onair {

@@ -91,6 +91,18 @@ of a per-song one — there's no way around this without switching the app to
 play audio in-browser via Spotify's Web Playback SDK, a bigger architecture
 change (and Premium-only).
 
+### If the UI looks broken after a deploy
+
+`index.html` loads `config.js`, `auth.js`, `spotify.js`, `station.js`, and
+`app.js` with a shared `?v=YYYYMMDD` query string. GitHub Pages and mobile
+Safari can cache these files individually, so after a deploy that renames or
+removes an element ID, a browser can end up running old JS against new HTML
+(or vice versa) — usually showing up as controls that silently don't do
+anything. Bumping that version string on every deploy forces a clean fetch
+of the whole set together. If you ever see broken-looking controls right
+after a deploy, a hard refresh (or bumping the version string again) is the
+first thing to try.
+
 ## Good to know
 
 - Your Spotify Developer app is capped at 5 allowlisted users — perfect
