@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="style.css?v=20260811" />
+<link rel="stylesheet" href="style.css?v=20260812" />
 </head>
 <body>
 
@@ -41,9 +41,13 @@
 
     <div class="dsk-main">
       <div id="home-view">
-        <div class="onair" style="align-self:flex-end">
-          <div id="on-air-dot" class="dot"></div>
-          <span id="on-air-label">OFF AIR</span>
+        <div class="home-header">
+          <span class="home-header-spacer"></span>
+          <h1 class="home-heading">Taste Engine</h1>
+          <div class="onair">
+            <div id="on-air-dot" class="dot"></div>
+            <span id="on-air-label">OFF AIR</span>
+          </div>
         </div>
 
         <div class="dsk-np">
@@ -107,6 +111,7 @@
                 <button type="submit" class="btn btn-secondary">Add</button>
               </form>
               <div id="seed-status" class="hint-text"></div>
+              <div id="seed-list" class="seed-list"></div>
             </div>
 
             <div class="side-block">
@@ -134,7 +139,6 @@
               Your Spotify stats
               <img src="icons/spotify-icon-black.svg" alt="Spotify" class="spotify-mark" />
             </span>
-            <span class="stats-caveat">— rank + Spotify's global popularity score, not personal play counts (Spotify doesn't expose those via the API)</span>
           </p>
           <div class="seg-control" id="stats-range">
             <button type="button" class="seg-opt" data-range="short_term">Last 4 weeks</button>
@@ -166,10 +170,10 @@
   </div>
 </div>
 
-<script src="config.js?v=20260811"></script>
-<script src="auth.js?v=20260811"></script>
-<script src="spotify.js?v=20260811"></script>
-<script src="station.js?v=20260811"></script>
-<script src="app.js?v=20260811"></script>
+<script src="config.js?v=20260812"></script>
+<script src="auth.js?v=20260812"></script>
+<script src="spotify.js?v=20260812"></script>
+<script src="station.js?v=20260812"></script>
+<script src="app.js?v=20260812"></script>
 </body>
 </html>

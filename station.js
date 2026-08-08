@@ -81,6 +81,11 @@ const Station = {
     return artist.name;
   },
 
+  removeSeedArtist(id) {
+    const seeds = this.getSeedArtists().filter((s) => s.id !== id);
+    saveJSON(STATION_STORAGE_KEYS.seeds, seeds);
+  },
+
   // Pull a handful of tracks from an artist's albums (deep cuts, not just hits,
   // since Get Artist's Top Tracks was removed in Feb 2026).
   async tracksForArtist(artistId, maxAlbums = 2, maxTracksPerAlbum = 4) {

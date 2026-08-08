@@ -63,11 +63,12 @@ Screen**. It'll open full-screen like a native app from then on.
    device, then builds a fresh queue from your taste and starts playing
    through the Spotify app on your phone.
 6. Add artist names under "Add a taste seed" any time to pull more of
-   their catalog into the discovery pool.
-7. Tap **Stats** in the nav to see your current top artists and songs,
-   ranked, with a time-range toggle (last 4 weeks / 6 months / all time —
-   Spotify's own ranges; it doesn't expose literal calendar-year
-   boundaries).
+   their catalog into the discovery pool — added seeds show up as chips
+   underneath the form, each with an **×** to remove it again.
+7. Each card in "Up next in your rotation" has an **×** to take it out of
+   the queue (see caveat below). Tap **Stats** in the nav to see your
+   current top artists and songs, ranked, with a time-range toggle (last
+   4 weeks / 6 months / all time — Spotify's own ranges; see caveat below).
 
 ## How the mix works
 
@@ -83,19 +84,38 @@ Every pick, the engine flips a weighted coin (the slider) between two pools:
   have saved" — not a Spotify recommendation, since Spotify retired the
   `/recommendations` endpoint in late 2024.
 
-Each pick shows its album art and a badge (**NEW** or **FAMILIAR**) so you
-can see at a glance which pool it came from. The "Up next in your rotation"
-list and the "Your taste profile" stats (tracks in rotation, seed artists)
-reflect what's actually queued and in your pools — not placeholder numbers.
-The queue tops itself up by exactly one track every time Spotify reports
-the current song has changed (finished, skipped, or gone to the previous
-track), on top of a low-buffer safety net.
+Each pick shows its album art (shown at its real aspect ratio, never
+cropped or rounded) and a badge (**NEW** or **FAMILIAR**) so you can see at
+a glance which pool it came from. The "Up next in your rotation" list is
+rendered straight from Spotify's actual queue on every poll, not from this
+app's own bookkeeping — if it ever looked out of sync with what actually
+played next before, that was the bug; reading Spotify's real queue state
+directly fixes it. The "Your taste profile" stats (tracks in rotation, seed
+artists) reflect what's actually queued and in your pools — not placeholder
+numbers. The queue tops itself up by exactly one track every time Spotify
+reports the current song has changed (finished, skipped, or gone to the
+previous track), on top of a low-buffer safety net.
 
-The **Stats** tab uses Spotify's actual top-artists/top-tracks data (rank
-order + Spotify's global popularity score, 0–100). Spotify doesn't expose
-personal play counts via the API, so "Popularity" there is not "how much
-you've played this" — it's Spotify's own general popularity metric for
-that artist/track. Rank, on the other hand, is genuinely yours.
+**Removing a song from the queue** works differently depending on
+position, because Spotify's API has no "delete this specific queued track"
+operation — the only queue-mutating call it exposes is "skip to next."
+Removing the very next track is a real, immediate skip. Removing anything
+deeper just marks it (shown struck-through, with an undo) — this app then
+auto-skips it the instant it becomes the current track. That means a
+deeper removal isn't instant; the track will still very briefly become
+"now playing" before getting skipped. There's no way to do better than
+that through the public API.
+
+The **Stats** tab uses Spotify's actual top-artists/top-tracks data. It
+originally showed Spotify's "popularity" score (0–100), but that field
+stopped returning data for this app, so artists now show follower count
+instead — a real, always-available number, though it's total followers,
+not monthly listeners (Spotify doesn't expose monthly listens or play
+counts to third-party apps at all, only inside Spotify's own apps and
+Spotify for Artists). Tracks have no equivalent numeric field, so track
+cards just show rank + artist. The three time ranges (4 weeks / 6 months /
+all time) are the only ones Spotify's API offers — there's no way to
+request a literal calendar-year or trailing-12-month window.
 
 The VU meter bars are driven by the current track's actual tempo/energy via
 Spotify's audio-features endpoint when available. That endpoint requires
@@ -135,10 +155,12 @@ this app implements the requirements that actually apply to it:
   from Spotify's playback-state response and disable whatever's actually
   restricted (e.g. a Free-tier account not being allowed to skip on demand)
   instead of showing controls that would just fail when tapped.
-- **Album artwork** — corner radius matches their spec exactly (8px on
-  desktop, 4px on mobile/small devices) rather than this app's own more
-  rounded UI style, and art is never cropped, distorted, or overlaid with
-  text/logos.
+- **Album artwork** — never cropped, distorted, or overlaid with text/logos
+  (shown with `object-fit: contain` at its real aspect ratio). Note: their
+  guidelines suggest a 4px/8px corner radius, but this app shows artwork
+  with square corners at explicit request — a deliberate deviation, not an
+  oversight. That's a soft design recommendation, not a legal requirement,
+  and doesn't apply the same way to a personal, non-public-listing app.
 - **Naming/branding** — "Taste Engine" doesn't include or resemble "Spotify"
   in name or mark, and the color system doesn't touch Spotify Green or their
   circle/wave marks, so there's no implied endorsement.
