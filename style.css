@@ -467,6 +467,10 @@ select, input[type="text"] {
 .feed-remove-btn:hover { color: var(--color-accent-700); }
 .feed-card-pending { opacity: 0.55; }
 .feed-card-pending .feed-name { text-decoration: line-through; }
+.feed-card-edge-fade {
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0) 80%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0) 80%);
+}
 
 .ratio-row { display: flex; align-items: center; gap: 12px; }
 #ratio-slider { flex: 1; accent-color: var(--color-accent); }

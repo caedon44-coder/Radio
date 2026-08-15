@@ -167,6 +167,24 @@ function buildCard({ rank, image, name, sub, tagText, tagClass, url, onRemove, p
   return card;
 }
 
+// pickNext() only avoids URIs in the rolling play/queue history (see
+// Station.wasRecentlyPlayed) - it has no visibility into what's actually
+// sitting in Spotify's live queue right now. When the candidate pool is
+// small, that history-based check alone isn't enough: pickFromPool's
+// fallback eventually ignores recency altogether once everything in the
+// pool has been "recently" picked, and can re-select something that's
+// already queued and unplayed. This checks the real queue directly, which
+// is ground truth, and retries a few times rather than duplicating it.
+function pickNextAvoiding(queuedUris, maxAttempts = 5) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const candidate = Station.pickNext();
+    if (!candidate) return null;
+    if (!queuedUris.has(candidate.uri)) return candidate;
+    Station.log(`Skipping duplicate pick "${candidate.name}" - already in the queue.`);
+  }
+  return null;
+}
+
 // ---- Up-next feed (rendered straight from Spotify's real queue, not our own
 // bookkeeping - the previous local-array approach could drift from what
 // Spotify actually plays next, e.g. if another device/app touched the
@@ -179,20 +197,21 @@ function renderFeedFromQueue(queueItems) {
     list.innerHTML = '<p class="feed-empty">Nothing queued yet.</p>';
     return;
   }
-  lastQueueSnapshot.slice(0, 8).forEach((track, idx) => {
+  const visible = lastQueueSnapshot.slice(0, 6);
+  visible.forEach((track, idx) => {
     const pending = pendingSkipUris.has(track.uri);
-    list.appendChild(
-      buildCard({
-        image: albumImage(track.album?.images),
-        name: track.name,
-        sub: track.artists?.[0]?.name,
-        tagText: Station.originByUri[track.uri] === "fresh" ? "new" : null,
-        tagClass: "tag-accent-2",
-        url: spotifyOpenUrl(track.uri),
-        pending,
-        onRemove: () => toggleQueueRemoval(track.uri, idx === 0)
-      })
-    );
+    const card = buildCard({
+      image: albumImage(track.album?.images),
+      name: track.name,
+      sub: track.artists?.[0]?.name,
+      tagText: Station.originByUri[track.uri] === "fresh" ? "new" : null,
+      tagClass: "tag-accent-2",
+      url: spotifyOpenUrl(track.uri),
+      pending,
+      onRemove: () => toggleQueueRemoval(track.uri, idx === 0)
+    });
+    if (idx === visible.length - 1) card.classList.add("feed-card-edge-fade");
+    list.appendChild(card);
   });
 }
 
@@ -615,9 +634,11 @@ async function startStation() {
     // at this point, so a failure queueing an extra track shouldn't abort
     // startup and leave the transport controls stuck disabled - log it and
     // keep going instead.
+    const queuedThisSession = new Set([first.uri]);
     for (let i = 0; i < CONFIG.QUEUE_TARGET_SIZE - 1; i++) {
-      const next = Station.pickNext();
+      const next = pickNextAvoiding(queuedThisSession);
       if (!next) break;
+      queuedThisSession.add(next.uri);
       try {
         await Spotify.addToQueue(next.uri, selectedDeviceId);
         Station.remember(next.uri);
@@ -695,7 +716,8 @@ async function topUpQueue() {
     // plus a low-buffer safety net in case the queue ever runs dry without
     // a track-change to notice it by (e.g. right after starting up).
     if (trackChanged || upcoming < 3) {
-      const next = Station.pickNext();
+      const queuedUris = new Set([state?.item?.uri, ...(queue?.queue || []).map((t) => t.uri)].filter(Boolean));
+      const next = pickNextAvoiding(queuedUris);
       if (next) {
         await Spotify.addToQueue(next.uri, selectedDeviceId);
         Station.remember(next.uri);
