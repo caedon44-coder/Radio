@@ -584,15 +584,21 @@ function renderNowPlaying(item) {
 }
 
 // Spotify's API has no direct "clear queue" endpoint. Draining by skipping
-// through whatever's already queued (checking after each skip) is the only
-// way to actually guarantee a clean slate before we queue our own picks -
-// otherwise leftover tracks from a previous session, or whatever was
-// already lined up on the device, can end up mixed in with the new mix.
+// through whatever's already queued is the only way to actually guarantee a
+// clean slate before we queue our own picks - otherwise leftover tracks from
+// a previous session, or whatever was already lined up on the device, can
+// end up mixed in with the new mix.
+//
+// Each skip briefly makes the skipped-to track "now playing" on the device
+// before the following skip cancels it (same Spotify Connect quirk noted for
+// queue removal above) - that's audible as a blip of that track. Checking
+// the queue length once up front and then firing skips back-to-back (rather
+// than re-fetching the queue between every single skip) halves the network
+// round trips between blips, which is as tight as the public API allows.
 async function clearSpotifyQueue(maxSkips = 15) {
-  for (let i = 0; i < maxSkips; i++) {
-    const queue = await Spotify.getCurrentQueue();
-    const upcoming = queue?.queue?.length || 0;
-    if (upcoming === 0) break;
+  const queue = await Spotify.getCurrentQueue();
+  const upcoming = Math.min(queue?.queue?.length || 0, maxSkips);
+  for (let i = 0; i < upcoming; i++) {
     await Spotify.skipNext();
   }
 }
