@@ -589,17 +589,47 @@ function renderNowPlaying(item) {
 // a previous session, or whatever was already lined up on the device, can
 // end up mixed in with the new mix.
 //
-// Each skip briefly makes the skipped-to track "now playing" on the device
-// before the following skip cancels it (same Spotify Connect quirk noted for
-// queue removal above) - that's audible as a blip of that track. Checking
-// the queue length once up front and then firing skips back-to-back (rather
-// than re-fetching the queue between every single skip) halves the network
-// round trips between blips, which is as tight as the public API allows.
-async function clearSpotifyQueue(maxSkips = 15) {
+// Each skip makes the skipped-to track "now playing" on the device, which
+// used to be audible as the radio rapidly flicking through a bunch of songs
+// on startup. To avoid that:
+//  - the device is paused and muted for the duration of the drain, and
+//  - playback is first switched to just our opening track, which drops the
+//    old album/playlist context. The queue endpoint lists those context
+//    tracks too, so without this we'd skip through up to ~20 of them;
+//    afterwards only manually-queued leftovers remain to be skipped.
+// The caller restarts the real track (and restores volume) afterwards.
+async function clearSpotifyQueue(firstUri, maxSkips = 15) {
+  await Spotify.startPlayback(selectedDeviceId, [firstUri]);
   const queue = await Spotify.getCurrentQueue();
   const upcoming = Math.min(queue?.queue?.length || 0, maxSkips);
   for (let i = 0; i < upcoming; i++) {
     await Spotify.skipNext();
+  }
+}
+
+// Silences the device while the queue is drained. Returns a function that
+// restores the previous volume (a no-op if the device can't be muted, e.g.
+// some phones don't allow remote volume control).
+async function muteDevice() {
+  try {
+    const state = await Spotify.getPlaybackState();
+    const device = state?.device;
+    if (state?.is_playing) await Spotify.pause().catch(() => {});
+    if (!device?.supports_volume || device.volume_percent == null || device.volume_percent === 0) {
+      return async () => {};
+    }
+    const previous = device.volume_percent;
+    await Spotify.setVolume(0, selectedDeviceId);
+    return async () => {
+      try {
+        await Spotify.setVolume(previous, selectedDeviceId);
+      } catch (e) {
+        Station.log(`Couldn't restore volume: ${e.message}`);
+      }
+    };
+  } catch (e) {
+    Station.log(`Couldn't mute device for queue clear: ${e.message}`);
+    return async () => {};
   }
 }
 
@@ -612,6 +642,11 @@ async function startStation() {
   $("start-btn").disabled = true;
   $("start-btn").textContent = "Spinning up...";
 
+  // On "Restart Engine" the poller is still running - stop it so it doesn't
+  // react to (and render, or queue against) the tracks we skip through while
+  // clearing the queue. It's restarted once startup finishes.
+  clearInterval(pollTimer);
+
   try {
     await Station.refillPools();
     updateStats();
@@ -622,14 +657,19 @@ async function startStation() {
     await Spotify.transferPlayback(selectedDeviceId, false);
     await new Promise((r) => setTimeout(r, 800)); // let transfer settle
 
+    const restoreVolume = await muteDevice();
     try {
       Station.log("Clearing existing Spotify queue...");
-      await clearSpotifyQueue();
+      await clearSpotifyQueue(first.uri);
     } catch (e) {
       Station.log(`Couldn't fully clear the queue, continuing anyway: ${e.message}`);
     }
 
-    await Spotify.startPlayback(selectedDeviceId, [first.uri]);
+    try {
+      await Spotify.startPlayback(selectedDeviceId, [first.uri]);
+    } finally {
+      await restoreVolume();
+    }
     Station.remember(first.uri);
     lastKnownPlayingUri = first.uri;
     pendingSkipUris = new Set();
@@ -662,7 +702,13 @@ async function startStation() {
     startPolling();
   } catch (e) {
     Station.log(`Couldn't start engine: ${e.message}`);
-    $("start-btn").textContent = "Start Engine";
+    if (engineStarted) {
+      // A failed restart leaves the previous session playing - keep tracking it.
+      $("start-btn").textContent = "Restart Engine";
+      startPolling();
+    } else {
+      $("start-btn").textContent = "Start Engine";
+    }
   } finally {
     $("start-btn").disabled = false;
   }

@@ -93,6 +93,10 @@ const Spotify = {
   skipNext: () => spotifyFetch("/me/player/next", { method: "POST" }),
   skipPrevious: () => spotifyFetch("/me/player/previous", { method: "POST" }),
   pause: () => spotifyFetch("/me/player/pause", { method: "PUT" }),
+  setVolume: (percent, deviceId) =>
+    spotifyFetch(`/me/player/volume?volume_percent=${Math.round(percent)}&device_id=${deviceId}`, {
+      method: "PUT"
+    }),
   // Resumes whatever was already loaded, unlike startPlayback which always
   // supplies a fresh track list.
   resume: () => spotifyFetch("/me/player/play", { method: "PUT" })
